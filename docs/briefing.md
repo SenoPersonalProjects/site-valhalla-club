@@ -260,18 +260,19 @@ Exemplos:
 O projeto usa o seguinte fluxo:
 
 ```txt
-main      -> produção
-develop   -> integração das features antes de produção
-dev-front -> integração da equipe de front-end
-dev-back  -> integração da equipe de back-end
+main    -> produção
+develop -> integração, homologação e preparação antes de produção
 ```
 
 Fluxo esperado:
 
 ```txt
-front/nome-da-tarefa -> dev-front -> develop -> main
-back/nome-da-tarefa  -> dev-back  -> develop -> main
-db/nome-da-tarefa    -> dev-back  -> develop -> main
+front/nome-da-tarefa -> develop -> main
+back/nome-da-tarefa  -> develop -> main
+db/nome-da-tarefa    -> develop -> main
+docs/nome-da-tarefa  -> develop -> main
+chore/nome-da-tarefa -> develop -> main
+fix/nome-da-correcao -> develop -> main
 ```
 
 ---
