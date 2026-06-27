@@ -14,6 +14,11 @@ O Site Valhalla Club tem como objetivo apresentar a marca Valhalla, divulgar not
 - Versionamento: GitHub
 - Gerenciamento de tarefas: ClickUp
 
+## Aplicações
+
+- `apps/web`: front-end em Next.js, TypeScript, Tailwind CSS e App Router.
+- `apps/api`: API back-end do projeto em NestJS.
+
 ## Setup local
 
 Para configurar o projeto localmente, siga o guia:
