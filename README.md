@@ -30,40 +30,35 @@ Para configurar o projeto localmente, siga o guia:
 O projeto usa o seguinte fluxo:
 
 - `main`: branch de produção.
-- `develop`: branch de integração das features antes de produção.
-- `dev-front`: branch de integração da equipe de front-end.
-- `dev-back`: branch de integração da equipe de back-end.
+- `develop`: branch de integração, homologação e preparação antes de produção.
 
 ## Fluxo de trabalho
 
 1. Toda tarefa deve ser desenvolvida em uma branch própria.
-2. Branches de front-end devem sair de `dev-front`.
-3. Branches de back-end devem sair de `dev-back`.
-4. Branches de banco de dados devem sair de `dev-back`.
-5. Branches de documentação ou configuração podem sair de `develop`, salvo orientação diferente do tech lead.
-6. Após finalizar uma tarefa, abrir um Pull Request para a branch da equipe.
-7. Após reunião ou validação interna, `dev-front` e `dev-back` abrem Pull Request para `develop`.
-8. O tech lead testa a `develop`.
-9. Se estiver tudo certo, `develop` é enviada para `main`.
+2. Toda branch de tarefa deve sair da `develop`.
+3. Após finalizar uma tarefa, abrir Pull Request para `develop`.
+4. O tech lead revisa e testa a `develop`.
+5. Se estiver tudo certo, `develop` é enviada para `main`.
+6. Após o merge na `main`, se necessário, a `main` deve ser sincronizada de volta na `develop`.
 
 ## Exemplos de fluxo
 
 ### Front-end
 
 ```txt
-front/header-landing-page -> dev-front -> develop -> main
+front/header-landing-page -> develop -> main
 ```
 
 ### Back-end
 
 ```txt
-back/health-check -> dev-back -> develop -> main
+back/health-check -> develop -> main
 ```
 
 ### Banco de Dados
 
 ```txt
-db/schema-inicial -> dev-back -> develop -> main
+db/schema-inicial -> develop -> main
 ```
 
 ### Documentação
@@ -194,22 +189,21 @@ chore: configurar eslint no projeto
 
 ## Regras importantes
 
-- Não fazer push direto na `main`.
-- Não fazer push direto na `develop`.
-- Commits diretos em `dev-front` e `dev-back` devem ser evitados.
-- Cada tarefa do ClickUp deve ter uma branch própria.
-- Toda Pull Request precisa estar relacionada a uma tarefa do ClickUp.
-- Antes de abrir uma Pull Request, o responsável deve rodar o projeto localmente e testar o que foi feito.
-- Ao finalizar o desenvolvimento, mover a tarefa no ClickUp para Homologação.
-- O merge para `main` só deve ser feito após validação do tech lead.
+* Não fazer push direto na `main`.
+* Não fazer push direto na `develop`.
+* Cada tarefa deve ter uma branch própria.
+* Toda Pull Request precisa estar relacionada a uma tarefa ou alteração clara.
+* Antes de abrir uma Pull Request, o responsável deve rodar o projeto localmente e testar o que foi feito.
+* Ao finalizar o desenvolvimento, a Pull Request deve ser enviada para revisão/homologação.
+* O merge para `main` só deve ser feito após validação do tech lead.
 
 ## Exemplos práticos
 
 ### Criando uma branch de front-end
 
 ```bash
-git checkout dev-front
-git pull origin dev-front
+git checkout develop
+git pull origin develop
 git checkout -b front/header-landing-page
 ```
 
@@ -224,14 +218,14 @@ git push origin front/header-landing-page
 Abrir Pull Request:
 
 ```txt
-front/header-landing-page -> dev-front
+front/header-landing-page -> develop
 ```
 
 ### Criando uma branch de back-end
 
 ```bash
-git checkout dev-back
-git pull origin dev-back
+git checkout develop
+git pull origin develop
 git checkout -b back/health-check
 ```
 
@@ -246,5 +240,5 @@ git push origin back/health-check
 Abrir Pull Request:
 
 ```txt
-back/health-check -> dev-back
+back/health-check -> develop
 ```

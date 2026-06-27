@@ -85,39 +85,36 @@ Exemplos:
 O projeto usa o seguinte fluxo:
 
 ```txt
-main      -> produção
-develop   -> integração das features antes de produção
-dev-front -> integração da equipe de front-end
-dev-back  -> integração da equipe de back-end
+main    -> produção
+develop -> integração, homologação e preparação antes de produção
 ```
 
 ## Regras de branches
 
 - Não fazer push direto na `main`.
 - Não fazer push direto na `develop`.
-- Evitar commits diretos em `dev-front` e `dev-back`.
 - Cada tarefa do ClickUp deve ter uma branch própria.
 - Toda Pull Request deve estar relacionada a uma tarefa.
-- A branch da tarefa deve sair da branch da equipe correspondente.
+- A branch da tarefa deve sair da `develop`.
 
 ## Exemplos de fluxo
 
 ### Front-end
 
 ```txt
-front/header-landing-page -> dev-front -> develop -> main
+front/header-landing-page -> develop -> main
 ```
 
 ### Back-end
 
 ```txt
-back/health-check -> dev-back -> develop -> main
+back/health-check -> develop -> main
 ```
 
 ### Banco de dados
 
 ```txt
-db/schema-inicial -> dev-back -> develop -> main
+db/schema-inicial -> develop -> main
 ```
 
 ### Documentação
@@ -130,6 +127,12 @@ docs/guia-setup-local -> develop -> main
 
 ```txt
 chore/configurar-eslint -> develop -> main
+```
+
+### Correção
+
+```txt
+fix/responsividade-header -> develop -> main
 ```
 
 ## Padrão de nomes de branches
