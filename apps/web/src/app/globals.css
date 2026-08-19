@@ -1,16 +1,109 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0c0a09;
-  --foreground: #f0ebe0;
+  color-scheme: dark;
+
+  /* Valhalla Club — Brand colors */
+  --valhalla-graphite: #262526;
+  --valhalla-deep-blue: #024059;
+  --valhalla-blue: #07b0f2;
+  --valhalla-cyan: #1ab6d9;
+  --valhalla-steel: #499ca6;
+
+  /* UI — Neutral colors */
+  --neutral-black: #0b0d0f;
+  --neutral-surface: #14191d;
+  --neutral-elevated: #1d2429;
+  --neutral-border: #2d3940;
+  --neutral-silver: #f4f7fa;
+  --neutral-metal: #a9b4ba;
+
+  /* Semantic tokens */
+  --background: var(--neutral-black);
+  --foreground: var(--neutral-silver);
+
+  --surface: var(--neutral-surface);
+  --surface-elevated: var(--neutral-elevated);
+
+  --primary: var(--valhalla-blue);
+  --primary-hover: var(--valhalla-cyan);
+  --primary-foreground: var(--neutral-black);
+
+  --secondary: var(--valhalla-deep-blue);
+  --secondary-foreground: var(--neutral-silver);
+
+  --accent: var(--valhalla-cyan);
+  --accent-foreground: var(--neutral-black);
+
+  --muted: var(--valhalla-graphite);
+  --muted-foreground: var(--neutral-metal);
+
+  --border: var(--neutral-border);
+  --focus: var(--valhalla-blue);
 }
 
 @theme inline {
+  /* Brand utilities */
+  --color-valhalla-graphite: var(--valhalla-graphite);
+  --color-valhalla-deep-blue: var(--valhalla-deep-blue);
+  --color-valhalla-blue: var(--valhalla-blue);
+  --color-valhalla-cyan: var(--valhalla-cyan);
+  --color-valhalla-steel: var(--valhalla-steel);
+
+  /* Semantic color utilities */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: Arial, Helvetica, sans-serif;
-  --font-serif: var(--font-cinzel), Georgia, serif;
-  --font-mono: "Courier New", Courier, monospace;
+
+  --color-surface: var(--surface);
+  --color-surface-elevated: var(--surface-elevated);
+
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+
+  --color-border: var(--border);
+  --color-focus: var(--focus);
+
+  /* Typography */
+  --font-sans:
+    var(--font-geist),
+    Arial,
+    Helvetica,
+    sans-serif;
+
+  --font-serif:
+    var(--font-cormorant-garamond),
+    Georgia,
+    serif;
+
+  --font-display:
+    var(--font-cinzel),
+    Georgia,
+    serif;
+
+  --font-editorial:
+    var(--font-cormorant-garamond),
+    Georgia,
+    serif;
+
+  --font-decorative:
+    var(--font-medieval-sharp),
+    Georgia,
+    serif;
+
+  --font-mono:
+    "Courier New",
+    Courier,
+    monospace;
 }
 
 html {
@@ -22,8 +115,37 @@ html {
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family:
+    var(--font-geist),
+    Arial,
+    Helvetica,
+    sans-serif;
   overflow-x: clip;
+}
+
+::selection {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+
+/* Ornamento reutilizável para áreas visuais da landing. */
+.valhalla-grid {
+  background-image:
+    linear-gradient(
+      color-mix(in srgb, var(--primary) 6%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--primary) 6%, transparent) 1px,
+      transparent 1px
+    );
+  background-size: 36px 36px;
 }
 
 @media (prefers-reduced-motion: reduce) {

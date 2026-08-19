@@ -1,12 +1,37 @@
 import type { Metadata } from "next";
-import { Cinzel } from "next/font/google";
+import {
+  Cinzel,
+  Cormorant_Garamond,
+  Geist,
+  MedievalSharp,
+} from "next/font/google";
 import "./globals.css";
+
+const geist = Geist({
+  subsets: ["latin"],
+  variable: "--font-geist",
+  display: "swap",
+});
 
 const cinzel = Cinzel({
   subsets: ["latin"],
   variable: "--font-cinzel",
   display: "swap",
   weight: ["400", "600", "700"],
+});
+
+const cormorantGaramond = Cormorant_Garamond({
+  subsets: ["latin"],
+  variable: "--font-cormorant-garamond",
+  display: "swap",
+  weight: ["400", "500", "600", "700"],
+});
+
+const medievalSharp = MedievalSharp({
+  subsets: ["latin"],
+  variable: "--font-medieval-sharp",
+  display: "swap",
+  weight: "400",
 });
 
 export const metadata: Metadata = {
@@ -20,8 +45,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="pt-BR" className={`h-full antialiased ${cinzel.variable}`}>
-      <body className="min-h-full flex flex-col">{children}</body>
+    <html
+      lang="pt-BR"
+      className={`h-full antialiased ${geist.variable} ${cinzel.variable} ${cormorantGaramond.variable} ${medievalSharp.variable}`}
+    >
+      <body className="flex min-h-full flex-col font-sans">{children}</body>
     </html>
   );
 }

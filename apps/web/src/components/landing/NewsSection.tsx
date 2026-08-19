@@ -97,17 +97,17 @@ export function NewsSection() {
 
   return (
     <section
-      className="border-b border-[#1e1c19] bg-[#0d0b09]"
+      className="border-b border-border bg-background"
       id="eventos"
       ref={sectionRef}
       style={sectionHeight ? { height: sectionHeight } : undefined}
     >
       <div className="mx-auto max-w-7xl px-6 py-28 sm:px-10 lg:sticky lg:top-18 lg:flex lg:h-[calc(100vh-72px)] lg:flex-col lg:justify-center lg:px-12 lg:py-0">
         <div className="max-w-3xl">
-          <p className="text-xs font-semibold uppercase tracking-widest text-[#c9a84c]">
+          <p className="text-xs font-semibold uppercase tracking-widest text-primary">
             Eventos e notícias
           </p>
-          <h2 className="mt-5 font-serif text-4xl leading-tight text-[#f0ebe0] sm:text-5xl">
+          <h2 className="mt-5 font-display text-4xl leading-tight text-foreground sm:text-5xl">
             Título provisório para eventos e notícias.
           </h2>
         </div>
@@ -123,51 +123,53 @@ export function NewsSection() {
           >
             {newsItems.map((item, index) => (
               <article
-                className="overflow-hidden rounded-lg border border-[#2a2420] bg-[#141210] lg:w-190"
+                className="overflow-hidden rounded-lg border border-border bg-surface lg:w-190"
                 key={item.title}
               >
                 <div className="grid min-h-90 lg:grid-cols-[0.9fr_1.1fr]">
-                  <div className="relative min-h-64 border-b border-[#2a2420] bg-[#1a1612] lg:border-b-0 lg:border-r">
-                    <div className="absolute inset-0 bg-[linear-gradient(#c9a84c06_1px,transparent_1px),linear-gradient(90deg,#c9a84c06_1px,transparent_1px)] bg-size-[36px_36px]" />
-                    <div className="absolute inset-6 rounded border border-[#c9a84c]/15" />
-                    <div className="absolute left-1/2 top-1/2 h-28 w-28 -translate-x-1/2 -translate-y-1/2 rotate-45 rounded border border-[#c9a84c]/25 bg-[#c9a84c]/5" />
-                    <div className="absolute bottom-8 left-8 rounded border border-[#3a3028] bg-[#0c0a09]/95 px-3 py-2 text-xs font-semibold text-[#8a7d6e]">
+                  <div className="valhalla-grid relative min-h-64 border-b border-border bg-surface-elevated lg:border-b-0 lg:border-r">
+                    <div className="absolute inset-6 rounded border border-primary/15" />
+                    <div className="absolute left-1/2 top-1/2 h-28 w-28 -translate-x-1/2 -translate-y-1/2 rotate-45 rounded border border-primary/25 bg-primary/5" />
+                    <div className="absolute bottom-8 left-8 rounded border border-border bg-background/95 px-3 py-2 text-xs font-semibold text-muted-foreground">
                       {item.meta}
                     </div>
                   </div>
 
                   <div className="flex flex-col">
-                    <div className="border-b border-[#2a2420] p-6">
-                      <p className="text-xs font-semibold uppercase tracking-widest text-[#c9a84c]">
+                    <div className="border-b border-border p-6">
+                      <p className="text-xs font-semibold uppercase tracking-widest text-primary">
                         {item.tag}
                       </p>
-                      <h3 className="mt-4 font-serif text-3xl font-semibold text-[#f0ebe0]">
+                      <h3 className="mt-4 font-display text-3xl font-semibold text-foreground">
                         {item.title}
                       </h3>
                     </div>
-                    <p className="border-b border-[#2a2420] p-6 text-base leading-7 text-[#8a7d6e]">
+
+                    <p className="border-b border-border p-6 text-base leading-7 text-muted-foreground">
                       {item.description}
                     </p>
-                    <div className="grid grid-cols-3 border-b border-[#2a2420] text-center">
+
+                    <div className="grid grid-cols-3 border-b border-border text-center">
                       {["Info", "Data", "Status"].map((label) => (
                         <div
-                          className="border-r border-[#2a2420] p-5 last:border-r-0"
+                          className="border-r border-border p-5 last:border-r-0"
                           key={`${item.title}-${label}`}
                         >
-                          <p className="font-serif text-2xl font-semibold text-[#f0ebe0]">
+                          <p className="font-display text-2xl font-semibold text-foreground">
                             {index + 1}
                           </p>
-                          <p className="mt-1 text-xs text-[#6a5d50]">
+                          <p className="mt-1 text-xs text-muted-foreground">
                             {label}
                           </p>
                         </div>
                       ))}
                     </div>
+
                     <div className="p-6">
-                      <p className="text-xs font-semibold uppercase tracking-widest text-[#c9a84c]">
+                      <p className="text-xs font-semibold uppercase tracking-widest text-primary">
                         Observação
                       </p>
-                      <p className="mt-2 text-sm leading-6 text-[#8a7d6e]">
+                      <p className="mt-2 text-sm leading-6 text-muted-foreground">
                         Espaço reservado para detalhes provisórios do card.
                       </p>
                     </div>

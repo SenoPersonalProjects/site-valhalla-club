@@ -7,7 +7,7 @@ import { TeamSection } from "@/components/landing/TeamSection";
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-[#0c0a09] text-[#f0ebe0]">
+    <main className="min-h-screen bg-background text-foreground">
       <Header />
       <HeroSection />
       <AboutSection />
