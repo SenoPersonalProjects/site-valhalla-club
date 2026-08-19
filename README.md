@@ -19,11 +19,11 @@ O Site Valhalla Club tem como objetivo apresentar a marca Valhalla, divulgar not
 - `apps/web`: front-end em Next.js, TypeScript, Tailwind CSS e App Router.
 - `apps/api`: API back-end do projeto em NestJS.
 
-## Setup local
+## Documentação
 
-Para configurar o projeto localmente, siga o guia:
-
-[Guia de Setup Local](docs/setup-local.md)
+- [Guia de Setup Local](docs/setup-local.md)
+- [Briefing do Projeto](docs/briefing.md)
+- [Design System](docs/design-system.md)
 
 ## Fluxo de branches
 
