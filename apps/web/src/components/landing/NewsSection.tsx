@@ -1,183 +1,100 @@
-"use client";
+import { EventCarousel, type ClubEvent } from "./EventCarousel";
 
-import { useEffect, useRef, useState } from "react";
-
-const STICKY_TOP_OFFSET = 72;
-
-const newsItems = [
+const events: readonly ClubEvent[] = [
   {
-    title: "Card de exemplo 01",
-    tag: "Categoria",
+    id: "encontro-discord-ficha-rpg",
+    name: "Aprenda a fazer sua ficha de RPG",
+    date: "2026-08-20",
+    time: "20:00",
+    location: "Discord do Valhalla Club",
     description:
-      "Resumo provisório para indicar onde entrará uma notícia, evento ou chamada.",
-    meta: "01",
+      "Encontro guiado para iniciantes, com explicação passo a passo para criar sua ficha e tirar dúvidas.",
+    details:
+      "Participe pelo Discord do Valhalla Club e prepare seu personagem com o apoio da comunidade.",
+    status: "open",
+    category: "meeting",
+    artwork: "welcome",
+    image: {
+      src: "/images/events/encontro-discord-ficha-rpg.png",
+      alt: "Arte do encontro no Discord para criação de ficha de RPG",
+    },
   },
   {
-    title: "Card de exemplo 02",
-    tag: "Categoria",
+    id: "encontro-jogos-tabuleiro",
+    name: "Encontro de Jogos de Tabuleiro",
+    dateLabel: "Data a confirmar",
+    location: "Aracaju Parque Shopping",
     description:
-      "Resumo provisório para indicar onde entrará uma notícia, evento ou chamada.",
-    meta: "02",
+      "Encontro presencial para jogar, conhecer a comunidade e viver novas aventuras fora da mesa de RPG.",
+    details:
+      "O encontro será no Aracaju Parque Shopping, na Av. João Rodrigues, 42, bairro Industrial, Aracaju — SE.",
+    status: "upcoming",
+    category: "meeting",
+    artwork: "winter",
+    image: {
+      src: "/images/events/encontro-jogos-tabuleiro.png",
+      alt: "Arte do encontro presencial de jogos de tabuleiro do Valhalla Club",
+      position: "top",
+    },
   },
   {
-    title: "Card de exemplo 03",
-    tag: "Categoria",
+    id: "aniversario-valhalla-6-anos",
+    name: "6º Aniversário do Valhalla",
+    date: "2026-08-08",
+    location: "Barra dos Coqueiros, SE",
     description:
-      "Resumo provisório para indicar onde entrará uma notícia, evento ou chamada.",
-    meta: "03",
-  },
-  {
-    title: "Card de exemplo 04",
-    tag: "Categoria",
-    description:
-      "Resumo provisório para indicar onde entrará uma notícia, evento ou chamada.",
-    meta: "04",
+      "O Valhalla Club celebrou 6 anos de história em Barra dos Coqueiros, Sergipe.",
+    details:
+      "A comemoração aconteceu em 8 de agosto de 2026 e marcou o 6º aniversário do clube.",
+    status: "completed",
+    category: "celebration",
+    artwork: "anniversary",
+    image: {
+      src: "/images/events/aniversario-valhalla-6-anos.png",
+      alt: "Bolo comemorativo do aniversário do Valhalla Club",
+      position: "center",
+    },
   },
 ];
 
-function clamp(value: number) {
-  return Math.min(Math.max(value, 0), 1);
-}
-
 export function NewsSection() {
-  const sectionRef = useRef<HTMLElement>(null);
-  const viewportRef = useRef<HTMLDivElement>(null);
-  const trackRef = useRef<HTMLDivElement>(null);
-  const [sectionHeight, setSectionHeight] = useState<number | null>(null);
-  const [translateX, setTranslateX] = useState(0);
-
-  useEffect(() => {
-    let frame = 0;
-
-    const update = () => {
-      const section = sectionRef.current;
-      const viewport = viewportRef.current;
-      const track = trackRef.current;
-
-      if (!section || !viewport || !track || window.innerWidth < 1024) {
-        setSectionHeight(null);
-        setTranslateX(0);
-        return;
-      }
-
-      const sectionTop = section.offsetTop;
-      const stickyViewportHeight = Math.max(
-        window.innerHeight - STICKY_TOP_OFFSET,
-        1,
-      );
-      const maxTranslate = Math.max(track.scrollWidth - viewport.clientWidth, 0);
-      const nextSectionHeight = Math.ceil(stickyViewportHeight + maxTranslate);
-      const scrollRange = Math.max(maxTranslate, 1);
-      const rawProgress =
-        (window.scrollY - sectionTop + STICKY_TOP_OFFSET) / scrollRange;
-
-      setSectionHeight((currentHeight) =>
-        Math.abs((currentHeight ?? 0) - nextSectionHeight) > 1
-          ? nextSectionHeight
-          : currentHeight,
-      );
-      setTranslateX(clamp(rawProgress) * maxTranslate);
-    };
-
-    const requestUpdate = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(update);
-    };
-
-    update();
-    window.addEventListener("scroll", requestUpdate, { passive: true });
-    window.addEventListener("resize", requestUpdate);
-
-    return () => {
-      cancelAnimationFrame(frame);
-      window.removeEventListener("scroll", requestUpdate);
-      window.removeEventListener("resize", requestUpdate);
-    };
-  }, []);
-
   return (
-    <section
-      className="border-b border-border bg-background"
-      id="eventos"
-      ref={sectionRef}
-      style={sectionHeight ? { height: sectionHeight } : undefined}
-    >
-      <div className="mx-auto max-w-7xl px-6 py-28 sm:px-10 lg:sticky lg:top-18 lg:flex lg:h-[calc(100vh-72px)] lg:flex-col lg:justify-center lg:px-12 lg:py-0">
-        <div className="max-w-3xl">
-          <p className="text-xs font-semibold uppercase tracking-widest text-primary">
-            Eventos e notícias
-          </p>
-          <h2 className="mt-5 font-display text-4xl leading-tight text-foreground sm:text-5xl">
-            Título provisório para eventos e notícias.
-          </h2>
-        </div>
-
-        <div
-          className="mt-14 overflow-hidden lg:-mx-12 lg:px-12"
-          ref={viewportRef}
-        >
+    <section className="border-b border-border bg-background" id="eventos">
+      <div className="mx-auto max-w-7xl overflow-hidden px-6 py-14 sm:px-10 sm:py-16 lg:px-12">
+        <div className="relative">
           <div
-            className="grid gap-5 md:grid-cols-2 lg:flex lg:w-max lg:gap-6 lg:will-change-transform"
-            ref={trackRef}
-            style={{ transform: `translate3d(-${translateX}px, 0, 0)` }}
+            aria-hidden="true"
+            className="pointer-events-none absolute -right-28 -top-40 h-96 w-96 rotate-45 border border-primary/5"
           >
-            {newsItems.map((item, index) => (
-              <article
-                className="overflow-hidden rounded-lg border border-border bg-surface lg:w-190"
-                key={item.title}
-              >
-                <div className="grid min-h-90 lg:grid-cols-[0.9fr_1.1fr]">
-                  <div className="valhalla-grid relative min-h-64 border-b border-border bg-surface-elevated lg:border-b-0 lg:border-r">
-                    <div className="absolute inset-6 rounded border border-primary/15" />
-                    <div className="absolute left-1/2 top-1/2 h-28 w-28 -translate-x-1/2 -translate-y-1/2 rotate-45 rounded border border-primary/25 bg-primary/5" />
-                    <div className="absolute bottom-8 left-8 rounded border border-border bg-background/95 px-3 py-2 text-xs font-semibold text-muted-foreground">
-                      {item.meta}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col">
-                    <div className="border-b border-border p-6">
-                      <p className="text-xs font-semibold uppercase tracking-widest text-primary">
-                        {item.tag}
-                      </p>
-                      <h3 className="mt-4 font-display text-3xl font-semibold text-foreground">
-                        {item.title}
-                      </h3>
-                    </div>
-
-                    <p className="border-b border-border p-6 text-base leading-7 text-muted-foreground">
-                      {item.description}
-                    </p>
-
-                    <div className="grid grid-cols-3 border-b border-border text-center">
-                      {["Info", "Data", "Status"].map((label) => (
-                        <div
-                          className="border-r border-border p-5 last:border-r-0"
-                          key={`${item.title}-${label}`}
-                        >
-                          <p className="font-display text-2xl font-semibold text-foreground">
-                            {index + 1}
-                          </p>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {label}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="p-6">
-                      <p className="text-xs font-semibold uppercase tracking-widest text-primary">
-                        Observação
-                      </p>
-                      <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                        Espaço reservado para detalhes provisórios do card.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </article>
-            ))}
+            <div className="absolute inset-16 border border-primary/5" />
           </div>
+
+          <header className="relative max-w-2xl">
+            <div className="flex items-center gap-4 text-primary">
+              <p className="font-display text-sm font-semibold uppercase tracking-[0.14em] sm:text-base">
+                Eventos
+              </p>
+              <span
+                aria-hidden="true"
+                className="h-2 w-2 rotate-45 border border-primary"
+              />
+              <span
+                aria-hidden="true"
+                className="h-px w-20 bg-primary/40 sm:w-32"
+              />
+            </div>
+
+            <h2 className="mt-4 scroll-mt-24 font-display text-4xl font-semibold uppercase leading-none tracking-wide text-balance text-foreground sm:text-5xl lg:text-6xl">
+              Eventos
+            </h2>
+
+            <p className="mt-4 max-w-xl text-base leading-7 text-muted-foreground sm:text-lg">
+              Acompanhe os eventos que fazem parte da história e da comunidade
+              do Valhalla Club.
+            </p>
+          </header>
+
+          <EventCarousel events={events} />
         </div>
       </div>
     </section>
