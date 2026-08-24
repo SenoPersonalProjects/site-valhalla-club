@@ -1,3 +1,5 @@
+import { SectionHeader } from "@/components/ui/SectionHeader";
+
 import { EventCarousel, type ClubEvent } from "./EventCarousel";
 
 const events: readonly ClubEvent[] = [
@@ -59,7 +61,11 @@ const events: readonly ClubEvent[] = [
 
 export function NewsSection() {
   return (
-    <section className="border-b border-border bg-background" id="eventos">
+    <section
+      aria-labelledby="eventos-heading"
+      className="border-b border-border bg-background"
+      id="eventos"
+    >
       <div className="mx-auto max-w-7xl overflow-hidden px-6 py-14 sm:px-10 sm:py-16 lg:px-12">
         <div className="relative">
           <div
@@ -69,30 +75,12 @@ export function NewsSection() {
             <div className="absolute inset-16 border border-primary/5" />
           </div>
 
-          <header className="relative max-w-2xl">
-            <div className="flex items-center gap-4 text-primary">
-              <p className="font-display text-sm font-semibold uppercase tracking-[0.14em] sm:text-base">
-                Eventos
-              </p>
-              <span
-                aria-hidden="true"
-                className="h-2 w-2 rotate-45 border border-primary"
-              />
-              <span
-                aria-hidden="true"
-                className="h-px w-20 bg-primary/40 sm:w-32"
-              />
-            </div>
-
-            <h2 className="mt-4 scroll-mt-24 font-display text-4xl font-semibold uppercase leading-none tracking-wide text-balance text-foreground sm:text-5xl lg:text-6xl">
-              Eventos
-            </h2>
-
-            <p className="mt-4 max-w-xl text-base leading-7 text-muted-foreground sm:text-lg">
-              Acompanhe os eventos que fazem parte da história e da comunidade
-              do Valhalla Club.
-            </p>
-          </header>
+          <SectionHeader
+            description="Acompanhe os eventos que fazem parte da história e da comunidade do Valhalla Club."
+            eyebrow="Eventos"
+            id="eventos-heading"
+            title="Eventos"
+          />
 
           <EventCarousel events={events} />
         </div>
