@@ -381,6 +381,95 @@ Nunca remover indicadores de foco sem fornecer uma alternativa visível.
 
 ---
 
+## Layout das seções
+
+As principais seções da landing devem utilizar como referência o mesmo limite de largura e os mesmos espaçamentos horizontais:
+
+```txt
+max-w-7xl
+px-6
+sm:px-10
+lg:px-12
+```
+
+Seções devem evitar containers com larguras arbitrariamente diferentes sem uma justificativa de composição ou conteúdo.
+
+---
+
+## Cabeçalhos de seção
+
+O componente `apps/web/src/components/ui/SectionHeader.tsx` é o padrão para cabeçalhos das seções institucionais.
+
+Sua composição utiliza:
+
+1. eyebrow;
+2. losango e linha decorativa;
+3. título;
+4. descrição;
+5. conteúdo empilhado no mobile;
+6. título e descrição distribuídos em duas colunas em telas grandes.
+
+Exemplo:
+
+```tsx
+<SectionHeader
+  eyebrow="Aventuras em andamento"
+  title="Mesas rolando"
+  description="Conheça as campanhas conduzidas pela comunidade."
+  id="mesas-heading"
+/>
+```
+
+O componente é utilizado em:
+
+- Eventos;
+- Mesas;
+- Envolvidos.
+
+São exceções, por possuírem composições próprias:
+
+- Hero;
+- Sobre;
+- Contato/Footer.
+
+---
+
+## Responsividade
+
+- Começar pelo comportamento em telas pequenas.
+- Não permitir scroll horizontal acidental.
+- Múltiplas colunas devem convergir para uma coluna no mobile.
+- Evitar larguras fixas desnecessárias.
+- Manter áreas de interação adequadas para toque e outros dispositivos de entrada.
+- Carrosséis devem funcionar com toque, teclado e controles visíveis.
+
+---
+
+## Estados de interface
+
+Listas e coleções devem prever um estado vazio:
+
+```tsx
+items.length > 0 ? <Content /> : <EmptyState />
+```
+
+Estados de loading e error devem ser adicionados quando houver consumo dinâmico de API.
+
+---
+
+## Componentes reutilizáveis
+
+Antes de criar um novo componente, verificar os recursos existentes em `src/components/ui`.
+
+Componentes disponíveis incluem:
+
+- `HorizontalCarousel` — carrossel horizontal reutilizável;
+- `SectionHeader` — cabeçalho padrão das seções.
+
+Componentes específicos de domínio, como `TableCard`, podem permanecer próximos da feature que os utiliza.
+
+---
+
 ## Regras de implementação
 
 - Evitar HEX hardcoded nos componentes.

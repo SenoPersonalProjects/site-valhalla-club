@@ -17,6 +17,7 @@ type HorizontalCarouselProps = {
   };
   children: ReactNode;
   logicalSlideCount?: number;
+  loop?: boolean;
   slideClassName: string;
 };
 
@@ -57,6 +58,7 @@ export function HorizontalCarousel({
   autoplay,
   children,
   logicalSlideCount,
+  loop,
   slideClassName,
 }: HorizontalCarouselProps) {
   const slides = Children.toArray(children);
@@ -68,24 +70,47 @@ export function HorizontalCarousel({
 
   const logicalSlides = slides.slice(0, itemCount);
 
-  const hasAutoplay = Boolean(
-    autoplay && itemCount > 1,
+  const hasAutoplay = Boolean(autoplay && itemCount > 1);
+
+  /*
+   * O loop pode existir independentemente do autoplay.
+   *
+   * Quando `loop` não é informado, mantemos o comportamento anterior:
+   * carrosséis com autoplay também possuem loop.
+   *
+   * Exemplos:
+   *
+   * Eventos:
+   * autoplay = true
+   * loop não informado
+   * => loop ativo
+   *
+   * Mesas:
+   * autoplay = false
+   * loop = true
+   * => loop ativo sem rotação automática
+   */
+  const shouldLoop = Boolean(
+    (loop ?? hasAutoplay) && itemCount > 1,
   );
 
   /*
-   * O usuário possui apenas os eventos lógicos.
+   * O Embla precisa de conteúdo físico suficiente para manter o loop
+   * quando poucos itens são exibidos simultaneamente.
    *
-   * Com três eventos:
-   * A B C
+   * Os itens extras são apenas cópias internas.
+   * Indicadores e estado continuam considerando somente os itens lógicos.
    *
-   * o Embla recebe:
-   * A B C A B C
+   * Exemplo com quatro itens:
    *
-   * Isso fornece conteúdo suficiente para o loop,
-   * sem criar novos indicadores para o usuário.
+   * A B C D
+   *
+   * pode se tornar internamente:
+   *
+   * A B C D A B C D
    */
   const shouldCreateLoopCopies =
-    hasAutoplay && itemCount <= 3;
+    shouldLoop && itemCount <= 6;
 
   const repeatCount = shouldCreateLoopCopies
     ? Math.ceil(6 / itemCount)
@@ -101,7 +126,7 @@ export function HorizontalCarousel({
       align: "start",
       containScroll: "trimSnaps",
       duration: 42,
-      loop: hasAutoplay,
+      loop: shouldLoop,
       slidesToScroll: 1,
     });
 
@@ -279,7 +304,7 @@ export function HorizontalCarousel({
       {itemCount > 1 ? (
         <div className="mt-6 flex flex-wrap items-center justify-between gap-4 border-t border-border pt-5">
           <div
-            aria-label="Selecionar evento"
+            aria-label="Selecionar item do carrossel"
             className="flex gap-1.5"
             role="group"
           >

@@ -1,5 +1,7 @@
 import Image from "next/image";
 
+import { SectionHeader } from "@/components/ui/SectionHeader";
+
 type TeamRole = "leader" | "admin" | "master" | "developer";
 type MemberCardVariant = "standard" | "featured";
 
@@ -334,7 +336,11 @@ function MemberCard({
 
 export function TeamSection() {
   return (
-    <section className="border-b border-border bg-surface" id="equipe">
+    <section
+      aria-labelledby="equipe-heading"
+      className="border-b border-border bg-surface"
+      id="equipe"
+    >
       <div className="mx-auto max-w-7xl overflow-hidden px-6 py-24 sm:px-10 sm:py-28 lg:px-12">
         <div className="relative">
           <div
@@ -344,23 +350,12 @@ export function TeamSection() {
             <div className="absolute inset-14 border border-primary/5" />
           </div>
 
-          <div className="relative max-w-2xl">
-            <div className="flex items-center gap-4">
-              <div aria-hidden="true" className="flex items-center">
-                <span className="h-px w-7 bg-primary/70 sm:w-12" />
-                <span className="h-2.5 w-2.5 rotate-45 border border-primary" />
-                <span className="h-px w-4 bg-primary/70" />
-              </div>
-              <h2 className="min-w-0 font-display text-3xl font-semibold uppercase tracking-wide text-foreground sm:text-4xl">
-                Envolvidos
-              </h2>
-            </div>
-
-            <p className="mt-4 max-w-xl text-sm leading-6 text-muted-foreground sm:ml-20 sm:text-base sm:leading-7">
-              Conheça as pessoas que assumem funções essenciais para fazer o
-              Valhalla Club acontecer.
-            </p>
-          </div>
+          <SectionHeader
+            description="Conheça as pessoas que assumem funções essenciais para fazer o Valhalla Club acontecer."
+            eyebrow="Comunidade"
+            id="equipe-heading"
+            title="Envolvidos"
+          />
 
           <ul
             aria-label="Áreas de atuação do Valhalla Club"

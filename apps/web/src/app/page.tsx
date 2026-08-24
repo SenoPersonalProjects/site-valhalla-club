@@ -3,6 +3,7 @@ import { Footer } from "@/components/landing/Footer";
 import { Header } from "@/components/landing/Header";
 import { HeroSection } from "@/components/landing/HeroSection";
 import { NewsSection } from "@/components/landing/NewsSection";
+import { TablesSection } from "@/components/landing/TablesSection";
 import { TeamSection } from "@/components/landing/TeamSection";
 
 export default function Home() {
@@ -12,6 +13,7 @@ export default function Home() {
       <HeroSection />
       <AboutSection />
       <NewsSection />
+      <TablesSection />
       <TeamSection />
       <Footer />
     </main>

@@ -5,6 +5,7 @@ import { useState } from "react";
 const navItems = [
   { label: "Sobre", href: "#sobre" },
   { label: "Eventos", href: "#eventos" },
+  { label: "Mesas", href: "#mesas" },
   { label: "Equipe", href: "#equipe" },
 ];
 
@@ -36,7 +37,7 @@ export function Header() {
 
         <nav
           aria-label="Navegação principal"
-          className="ml-auto hidden items-center gap-9 lg:flex"
+          className="ml-auto hidden items-center gap-6 lg:flex xl:gap-9"
         >
           {navItems.map((item) => (
             <a
