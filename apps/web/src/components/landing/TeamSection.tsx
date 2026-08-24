@@ -1,6 +1,7 @@
 import Image from "next/image";
 
 type TeamRole = "leader" | "admin" | "master" | "developer";
+type MemberCardVariant = "standard" | "featured";
 
 type TeamMember = {
   id: string;
@@ -18,58 +19,147 @@ const roleOrder: readonly TeamRole[] = [
   "developer",
 ];
 
-const roles: Record<TeamRole, { label: string; description: string }> = {
+// Fixed fractions keep card widths consistent while flex-wrap centers incomplete rows.
+const responsiveMemberCardWidth =
+  "sm:w-[calc(50%-0.375rem)] lg:w-[calc(33.333%-0.5rem)] xl:w-[calc(20%-0.6rem)]";
+
+const roles: Record<
+  TeamRole,
+  { label: string; badgeLabel: string; description: string }
+> = {
   leader: {
     label: "Liderança",
+    badgeLabel: "Líder",
     description: "Direção institucional do Valhalla Club.",
   },
   admin: {
     label: "Administradores",
+    badgeLabel: "Administrador",
     description: "Organização e funcionamento do clube.",
   },
   master: {
     label: "Mestres Oficiais",
+    badgeLabel: "Mestre Oficial",
     description: "Condução das mesas e atividades oficiais.",
   },
   developer: {
     label: "Desenvolvedores",
+    badgeLabel: "Desenvolvedor",
     description: "Criação das soluções digitais do Valhalla.",
   },
 };
 
 const teamMembers: readonly TeamMember[] = [
   {
+    id: "daniel",
+    name: "Daniel",
+    title: "Líder do Valhalla Club",
+    primaryRole: "leader",
+    roles: ["leader"],
+  },
+  {
+    id: "gabriel-bomfim",
+    name: "Gabriel Bomfim",
+    title: "Administrador",
+    primaryRole: "admin",
+    roles: ["admin", "master", "developer"],
+    image: "/team/gabriel-bomfim.webp",
+  },
+  {
+    id: "kaua",
+    name: "Kauã",
+    title: "Administrador",
+    primaryRole: "admin",
+    roles: ["admin"],
+  },
+  {
+    id: "leonardo-barbosa",
+    name: "Leonardo Barbosa",
+    title: "Administrador",
+    primaryRole: "admin",
+    roles: ["admin"],
+  },
+  {
+    id: "jamison",
+    name: "Jamison",
+    title: "Administrador",
+    primaryRole: "admin",
+    roles: ["admin"],
+  },
+  {
+    id: "limas",
+    name: "Limas",
+    title: "Administrador",
+    primaryRole: "admin",
+    roles: ["admin"],
+  },
+  {
+    id: "luiz",
+    name: "Luiz",
+    title: "Administrador",
+    primaryRole: "admin",
+    roles: ["admin"],
+  },
+  {
+    id: "rafael-barbosa",
+    name: "Rafael Barbosa",
+    title: "Administrador",
+    primaryRole: "admin",
+    roles: ["admin", "developer"],
+  },
+  {
+    id: "xavs",
+    name: "Xavs",
+    title: "Administrador",
+    primaryRole: "admin",
+    roles: ["admin", "developer"],
+  },
+  {
+    id: "bruna",
+    name: "Bruna",
+    title: "Administradora",
+    primaryRole: "admin",
+    roles: ["admin"],
+  },
+  {
+    id: "jhon",
+    name: "Jhon",
+    title: "Mestre Oficial",
+    primaryRole: "master",
+    roles: ["master"],
+  },
+  {
+    id: "isaac-artemis",
+    name: "Isaac Artemis",
+    title: "Mestre Oficial",
+    primaryRole: "master",
+    roles: ["master"],
+  },
+  {
+    id: "victor-lopes",
+    name: "Victor Lopes",
+    title: "Mestre Oficial",
+    primaryRole: "master",
+    roles: ["master"],
+  },
+  {
+    id: "marlon",
+    name: "Marlon",
+    title: "Mestre Oficial",
+    primaryRole: "master",
+    roles: ["master"],
+  },
+  {
     id: "vinicius",
-    name: "Vinicius",
+    name: "Vinícius",
     title: "Tech Lead / Full-stack",
     primaryRole: "developer",
-    roles: ["developer"],
+    roles: ["developer", "master"],
   },
   {
     id: "charles",
     name: "Charles",
     title: "Back-end / Banco de dados",
-    primaryRole: "developer",
-    roles: ["developer"],
-  },
-  {
-    id: "gabriel",
-    name: "Gabriel",
-    title: "Back-end / Banco de dados",
-    primaryRole: "developer",
-    roles: ["developer"],
-  },
-  {
-    id: "rafael-barbosa",
-    name: "Rafael Barbosa",
-    title: "Front-end / Design",
-    primaryRole: "developer",
-    roles: ["developer"],
-  },
-  {
-    id: "xavs",
-    name: "Xavs",
-    title: "Front-end / Design",
     primaryRole: "developer",
     roles: ["developer"],
   },
@@ -148,19 +238,33 @@ function getInitials(name: string) {
     .toUpperCase();
 }
 
-function MemberAvatar({ member }: { member: TeamMember }) {
-  const avatarClassName =
-    "h-16 w-16 rounded-full border border-primary/40 bg-secondary sm:h-24 sm:w-24";
+function MemberAvatar({
+  member,
+  variant,
+}: {
+  member: TeamMember;
+  variant: MemberCardVariant;
+}) {
+  const isFeatured = variant === "featured";
+  const imageSize = 96;
+  const avatarClassName = isFeatured
+    ? "h-20 w-20 rounded-full border border-primary/40 bg-secondary sm:h-24 sm:w-24"
+    : "h-16 w-16 rounded-full border border-primary/40 bg-secondary sm:h-24 sm:w-24";
 
   if (member.image) {
     return (
       <Image
         alt={`Foto de ${member.name}`}
         className={`${avatarClassName} object-cover`}
-        height={96}
-        sizes="(min-width: 640px) 96px, 64px"
+        height={imageSize}
+        quality={90}
+        sizes={
+          isFeatured
+            ? "(min-width: 640px) 96px, 80px"
+            : "(min-width: 640px) 96px, 64px"
+        }
         src={member.image}
-        width={96}
+        width={imageSize}
       />
     );
   }
@@ -177,17 +281,18 @@ function MemberAvatar({ member }: { member: TeamMember }) {
 
 function MemberCard({
   member,
-  featured = false,
+  variant = "standard",
 }: {
   member: TeamMember;
-  featured?: boolean;
+  variant?: MemberCardVariant;
 }) {
+  const isFeatured = variant === "featured";
   const additionalRoles = member.roles.filter(
     (role) => role !== member.primaryRole,
   );
-  const cardClassName = featured
-    ? "relative flex max-w-xl items-center gap-4 overflow-hidden rounded-lg border border-primary/40 bg-surface-elevated p-4 transition-colors hover:border-primary sm:min-h-40 sm:gap-5 sm:p-6"
-    : "relative flex items-center gap-4 overflow-hidden rounded-lg border border-border bg-surface-elevated p-4 transition-colors hover:border-primary/50 sm:min-h-68 sm:flex-col sm:justify-center sm:gap-0 sm:p-5 sm:text-center";
+  const cardClassName = isFeatured
+    ? "relative flex w-full max-w-lg items-center gap-5 overflow-hidden rounded-lg border border-primary/40 bg-surface-elevated p-5 transition-colors hover:border-primary sm:min-h-40"
+    : `relative flex w-full items-start gap-4 overflow-hidden rounded-lg border border-border bg-surface-elevated p-4 transition-colors hover:border-primary/50 sm:min-h-68 sm:flex-col sm:items-center sm:justify-start sm:gap-0 sm:p-5 sm:text-center ${responsiveMemberCardWidth}`;
 
   return (
     <article className={cardClassName}>
@@ -195,10 +300,10 @@ function MemberCard({
         <RoleIcon className="h-4 w-4" role={member.primaryRole} />
       </div>
 
-      <MemberAvatar member={member} />
+      <MemberAvatar member={member} variant={variant} />
 
       <div
-        className={`min-w-0 flex-1 pr-8 ${featured ? "" : "sm:mt-5 sm:flex-none sm:pr-0"}`}
+        className={`min-w-0 flex-1 pr-8 ${isFeatured ? "" : "sm:mt-5 sm:flex-none sm:pr-0"}`}
       >
         <h4 className="break-words font-display text-base font-semibold text-pretty text-foreground sm:text-lg">
           {member.name}
@@ -210,14 +315,14 @@ function MemberCard({
         {additionalRoles.length > 0 && (
           <ul
             aria-label={`Outras funções de ${member.name}`}
-            className={`mt-3 flex flex-wrap gap-1.5 ${featured ? "" : "sm:justify-center"}`}
+            className={`mt-3 flex flex-wrap gap-1.5 ${isFeatured ? "" : "sm:justify-center"}`}
           >
             {additionalRoles.map((role) => (
               <li
                 className="rounded-full border border-primary/30 bg-secondary px-2.5 py-1 text-xs text-secondary-foreground"
                 key={role}
               >
-                {roles[role].label}
+                {roles[role].badgeLabel}
               </li>
             ))}
           </ul>
@@ -307,20 +412,12 @@ export function TeamSection() {
                   </span>
                 </div>
 
-                <div
-                  className={`mt-5 grid gap-3 sm:grid-cols-2 ${
-                    role === "leader"
-                      ? "max-w-2xl"
-                      : role === "developer"
-                        ? "lg:grid-cols-5"
-                        : "lg:grid-cols-4 xl:grid-cols-5"
-                  }`}
-                >
+                <div className="mt-5 flex flex-wrap justify-center gap-3">
                   {members.map((member) => (
                     <MemberCard
-                      featured={role === "leader"}
                       key={member.id}
                       member={member}
+                      variant={role === "leader" ? "featured" : "standard"}
                     />
                   ))}
                 </div>
