@@ -4,95 +4,41 @@ import { SectionHeader } from "@/components/ui/SectionHeader";
 import { TableCard, type RpgTable } from "./TableCard";
 
 /*
- * Conteúdo temporário para desenvolvimento visual.
- *
- * Antes de lançar o MVP, substituir por mesas reais do Valhalla.
- * A estrutura já está preparada para, futuramente, receber os mesmos dados
- * por API sem alterar o componente visual.
+ * Dados estáticos enquanto a integração com a API de mesas
+ * ainda não está disponível.
  */
 const tables: readonly RpgTable[] = [
   {
-    id: "demo-cronicas-do-veu",
-    name: "Crônicas do Véu",
-    system: "Dungeons & Dragons 5e",
-    master: "Mestre do Valhalla",
-    status: "open",
+    id: "she-ra-protocolo-mecanus",
+    name: "She-Ra: Protocolo Mecanus",
+    system: "Corespring",
+    master: "Vitor",
+    status: "scheduled",
     description:
-      "Uma campanha de fantasia sombria para aventureiros que querem explorar ruínas, pactos antigos e escolhas com consequências.",
+      "A Rebelião interceptou uma comunicação da Horda sobre um laboratório onde eles estão trabalhando com algo relacionado ao chamado Protocolo Mecanus. Agora, as princesas precisam ir até o local onde está esse laboratório para descobrir o que a Horda está tramando e impedi-los antes que seja tarde demais.",
     mode: "Online",
-    schedule: "Sábados · 19h",
-    frequency: "Semanal",
-    seats: {
-      filled: 4,
-      total: 6,
-    },
-    tags: ["Fantasia", "Fantasia Sombria", "Exploração"],
-    level: "Iniciante",
-    artwork: "portal",
-    href: "#contato",
-  },
-  {
-    id: "demo-ecos-de-arton",
-    name: "Ecos de Arton",
-    system: "Tormenta 20",
-    master: "Mestre do Valhalla",
-    status: "ongoing",
-    description:
-      "Heróis atravessam territórios em conflito enquanto antigas ameaças voltam a despertar nas fronteiras de Arton.",
-    mode: "Presencial",
-    schedule: "Domingos · 15h",
-    frequency: "Quinzenal",
+    location: "Discord do Club",
+    schedule: "27/08 · 14h",
+    frequency: "Sessão única",
     seats: {
       filled: 5,
-      total: 6,
     },
-    tags: ["Fantasia heroica", "Exploração", "Política"],
+    players: ["Artemis", "Kauã", "Limas", "Elvis", "Bruna"],
+    tags: ["Fantasia", "+14", "Novatos bem-vindos", "Ficha pronta"],
+    contentWarning: "+14 — palavrões, bebidas alcoólicas e violência.",
+    image: {
+      src: "/images/tables/she-ra-protocolo-mecanus.png",
+      alt: "Arte da mesa She-Ra: Protocolo Mecanus.",
+      fit: "contain",
+    },
     artwork: "citadel",
     href: "#contato",
-  },
-  {
-    id: "demo-arquivos-secretos",
-    name: "Arquivos Secretos",
-    system: "Ordem Paranormal",
-    master: "Mestre do Valhalla",
-    status: "open",
-    description:
-      "Uma investigação sobre acontecimentos impossíveis coloca o grupo diante de registros que deveriam ter permanecido esquecidos.",
-    mode: "Online",
-    schedule: "Sextas · 20h",
-    frequency: "Quinzenal",
-    seats: {
-      filled: 3,
-      total: 5,
-    },
-    tags: ["Mistério", "Investigação", "Terror"],
-    level: "Intermediário",
-    artwork: "runes",
-    href: "#contato",
-  },
-  {
-    id: "demo-ultimo-salao",
-    name: "O Último Salão",
-    system: "Fabula Ultima",
-    master: "Mestre do Valhalla",
-    status: "ongoing",
-    description:
-      "Uma aventura focada nos personagens, descobertas e na construção coletiva de um mundo prestes a mudar para sempre.",
-    mode: "Híbrida",
-    schedule: "Terças · 19h30",
-    frequency: "Semanal",
-    seats: {
-      filled: 4,
-      total: 5,
-    },
-    tags: ["Narrativo", "Fantasia", "Personagens"],
-    artwork: "portal",
-    href: "#contato",
+    ctaLabel: "Falar com o Valhalla",
   },
 ];
 
 export function TablesSection() {
-  const hasTables = tables.length > 0;
+  const [firstTable] = tables;
 
   return (
     <section
@@ -117,18 +63,7 @@ export function TablesSection() {
           />
 
           <div className="relative mt-10 sm:mt-12">
-            {hasTables ? (
-              <HorizontalCarousel
-                ariaLabel="Mesas de RPG em destaque"
-                logicalSlideCount={tables.length}
-                loop
-                slideClassName="shrink-0 basis-[88%] sm:basis-[68%] lg:basis-[48%] xl:basis-[31.5%]"
-              >
-                {tables.map((table) => (
-                  <TableCard key={table.id} table={table} />
-                ))}
-              </HorizontalCarousel>
-            ) : (
+            {!firstTable ? (
               <div
                 className="rounded-xl border border-border bg-surface-elevated px-6 py-12 text-center sm:px-10 sm:py-16"
                 role="status"
@@ -171,6 +106,21 @@ export function TablesSection() {
                   Fale com o Valhalla
                 </a>
               </div>
+            ) : tables.length === 1 ? (
+              <div className="mx-auto max-w-4xl">
+                <TableCard table={firstTable} />
+              </div>
+            ) : (
+              <HorizontalCarousel
+                ariaLabel="Mesas de RPG em destaque"
+                logicalSlideCount={tables.length}
+                loop
+                slideClassName="shrink-0 basis-[88%] sm:basis-[68%] lg:basis-[48%] xl:basis-[31.5%]"
+              >
+                {tables.map((table) => (
+                  <TableCard key={table.id} table={table} />
+                ))}
+              </HorizontalCarousel>
             )}
           </div>
 

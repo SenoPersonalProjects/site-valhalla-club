@@ -1,4 +1,11 @@
-export type TableStatus = "open" | "ongoing" | "closed" | "cancelled";
+import Image from "next/image";
+
+export type TableStatus =
+  | "open"
+  | "ongoing"
+  | "scheduled"
+  | "closed"
+  | "cancelled";
 export type TableArtwork = "portal" | "runes" | "citadel";
 export type TableMode = "Online" | "Presencial" | "Híbrida";
 
@@ -10,13 +17,21 @@ export type RpgTable = {
   status: TableStatus;
   description: string;
   mode: TableMode;
+  location?: string;
   schedule: string;
   frequency: string;
   seats: {
     filled: number;
-    total: number;
+    total?: number;
   };
+  players?: readonly string[];
   tags: readonly string[];
+  contentWarning?: string;
+  image?: {
+    src: string;
+    alt: string;
+    fit?: "cover" | "contain";
+  };
   level?: string;
   artwork: TableArtwork;
   href?: string;
@@ -36,6 +51,10 @@ const statusStyles: Record<
   },
   ongoing: {
     label: "Em andamento",
+    className: "border-primary/60 bg-primary/10 text-primary",
+  },
+  scheduled: {
+    label: "Agendada",
     className: "border-primary/60 bg-primary/10 text-primary",
   },
   closed: {
@@ -249,7 +268,10 @@ function TableArtwork({ variant }: { variant: TableArtwork }) {
 
 export function TableCard({ table }: { table: RpgTable }) {
   const status = statusStyles[table.status];
-  const availableSeats = Math.max(table.seats.total - table.seats.filled, 0);
+  const availableSeats =
+    table.seats.total !== undefined
+      ? Math.max(table.seats.total - table.seats.filled, 0)
+      : null;
   const initials = getInitials(table.master);
 
   return (
@@ -263,7 +285,32 @@ export function TableCard({ table }: { table: RpgTable }) {
           aria-hidden="true"
           className="valhalla-grid absolute inset-0 opacity-40"
         />
-        <TableArtwork variant={table.artwork} />
+        {table.image ? (
+          <>
+            {table.image.fit === "contain" ? (
+              <Image
+                alt=""
+                aria-hidden="true"
+                className="scale-110 object-cover opacity-25 blur-md"
+                fill
+                sizes="(min-width: 1024px) 56rem, calc(100vw - 3rem)"
+                src={table.image.src}
+              />
+            ) : null}
+
+            <Image
+              alt={table.image.alt}
+              className={
+                table.image.fit === "contain" ? "object-contain" : "object-cover"
+              }
+              fill
+              sizes="(min-width: 1024px) 56rem, calc(100vw - 3rem)"
+              src={table.image.src}
+            />
+          </>
+        ) : (
+          <TableArtwork variant={table.artwork} />
+        )}
         <div
           aria-hidden="true"
           className="absolute inset-0 bg-linear-to-t from-background/80 via-transparent to-transparent"
@@ -277,7 +324,11 @@ export function TableCard({ table }: { table: RpgTable }) {
           </span>
 
           <span className="rounded border border-border/80 bg-background/80 px-3 py-1.5 text-xs font-semibold text-foreground backdrop-blur-sm">
-            {availableSeats} {availableSeats === 1 ? "vaga" : "vagas"}
+            {availableSeats !== null
+              ? `${availableSeats} ${availableSeats === 1 ? "vaga" : "vagas"}`
+              : `${table.seats.filled} ${
+                  table.seats.filled === 1 ? "jogador" : "jogadores"
+                }`}
           </span>
         </div>
 
@@ -299,7 +350,7 @@ export function TableCard({ table }: { table: RpgTable }) {
           {table.name}
         </h3>
 
-        <p className="mt-3 line-clamp-3 text-sm leading-6 text-pretty text-muted-foreground sm:text-base">
+        <p className="mt-3 text-sm leading-6 text-pretty text-muted-foreground sm:text-base">
           {table.description}
         </p>
 
@@ -331,22 +382,53 @@ export function TableCard({ table }: { table: RpgTable }) {
           </div>
         </div>
 
+        {table.players?.length || table.contentWarning ? (
+          <dl className="mt-5 grid gap-4 border-t border-border pt-5 text-sm leading-6">
+            {table.players?.length ? (
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  Jogadores
+                </dt>
+                <dd className="mt-1 text-foreground">{table.players.join(", ")}</dd>
+              </div>
+            ) : null}
+
+            {table.contentWarning ? (
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  Teor
+                </dt>
+                <dd className="mt-1 text-muted-foreground">
+                  {table.contentWarning}
+                </dd>
+              </div>
+            ) : null}
+          </dl>
+        ) : null}
+
         <dl className="mt-5 grid gap-3 border-y border-border py-5 text-sm text-muted-foreground sm:grid-cols-2">
           <div className="flex min-w-0 items-start gap-3">
             <dt className="sr-only">Jogadores</dt>
             <TableIcon className="mt-0.5 size-5 shrink-0 text-primary" name="users" />
             <dd>
               <span className="font-semibold text-foreground">
-                {table.seats.filled}/{table.seats.total}
+                {table.seats.total !== undefined
+                  ? `${table.seats.filled}/${table.seats.total}`
+                  : table.seats.filled}
               </span>{" "}
-              jogadores
+              {table.seats.filled === 1 ? "jogador" : "jogadores"}
             </dd>
           </div>
 
           <div className="flex min-w-0 items-start gap-3">
-            <dt className="sr-only">Modalidade</dt>
+            <dt className="sr-only">Modalidade e local</dt>
             <TableIcon className="mt-0.5 size-5 shrink-0 text-primary" name="mode" />
-            <dd>{table.mode}</dd>
+            <dd>
+              {table.mode}
+              {table.location ? (
+                <span className="block text-xs">{table.location}</span>
+              ) : null}
+            </dd>
           </div>
 
           <div className="flex min-w-0 items-start gap-3">
