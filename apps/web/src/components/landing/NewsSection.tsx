@@ -13,7 +13,7 @@ const events: readonly ClubEvent[] = [
       "Encontro guiado para iniciantes, com explicação passo a passo para criar sua ficha e tirar dúvidas.",
     details:
       "Participe pelo Discord do Valhalla Club e prepare seu personagem com o apoio da comunidade.",
-    status: "open",
+    status: "completed",
     category: "meeting",
     artwork: "welcome",
     image: {
