@@ -4,6 +4,7 @@ const footerLinks = [
   { label: "Início", href: "#inicio" },
   { label: "Sobre", href: "#sobre" },
   { label: "Eventos", href: "#eventos" },
+  { label: "Mesas", href: "#mesas" },
   { label: "Equipe", href: "#equipe" },
 ];
 
