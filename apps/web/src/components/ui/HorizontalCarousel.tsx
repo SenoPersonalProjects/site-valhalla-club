@@ -94,32 +94,7 @@ export function HorizontalCarousel({
     (loop ?? hasAutoplay) && itemCount > 1,
   );
 
-  /*
-   * Para coleções muito pequenas, são criadas cópias físicas para fornecer
-   * conteúdo suficiente ao loop.
-   *
-   * Coleções maiores utilizam diretamente o mecanismo de loop do Embla,
-   * evitando duplicar conteúdo interativo no DOM.
-   *
-   * Exemplo com três itens:
-   *
-   * A B C
-   *
-   * pode se tornar internamente:
-   *
-   * A B C A B C
-   */
-  const shouldCreateLoopCopies =
-    shouldLoop && itemCount <= 3;
-
-  const repeatCount = shouldCreateLoopCopies
-    ? Math.ceil(6 / itemCount)
-    : 1;
-
-  const physicalSlides = Array.from(
-    { length: repeatCount },
-    () => logicalSlides,
-  ).flat();
+  const physicalSlides = logicalSlides;
 
   const [carouselRef, carouselApi] =
     useEmblaCarousel({
