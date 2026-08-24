@@ -95,22 +95,22 @@ export function HorizontalCarousel({
   );
 
   /*
-   * O Embla precisa de conteúdo físico suficiente para manter o loop
-   * quando poucos itens são exibidos simultaneamente.
+   * Para coleções muito pequenas, são criadas cópias físicas para fornecer
+   * conteúdo suficiente ao loop.
    *
-   * Os itens extras são apenas cópias internas.
-   * Indicadores e estado continuam considerando somente os itens lógicos.
+   * Coleções maiores utilizam diretamente o mecanismo de loop do Embla,
+   * evitando duplicar conteúdo interativo no DOM.
    *
-   * Exemplo com quatro itens:
+   * Exemplo com três itens:
    *
-   * A B C D
+   * A B C
    *
    * pode se tornar internamente:
    *
-   * A B C D A B C D
+   * A B C A B C
    */
   const shouldCreateLoopCopies =
-    shouldLoop && itemCount <= 6;
+    shouldLoop && itemCount <= 3;
 
   const repeatCount = shouldCreateLoopCopies
     ? Math.ceil(6 / itemCount)
