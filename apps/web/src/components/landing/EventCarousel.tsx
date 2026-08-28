@@ -473,7 +473,6 @@ export function EventCarousel({ events }: EventCarouselProps) {
     <div className="relative mt-8">
       <HorizontalCarousel
         ariaLabel="Eventos do Valhalla Club"
-        autoplay={{ delayMs: 7000 }}
         logicalSlideCount={events.length}
         slideClassName="flex-[0_0_100%] lg:flex-[0_0_calc((100%_-_1.25rem)_/_2)]"
       >

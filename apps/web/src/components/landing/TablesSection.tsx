@@ -173,17 +173,6 @@ export function TablesSection() {
               </div>
             )}
           </div>
-
-          <div className="relative mt-8 flex flex-col gap-3 border-t border-border pt-6 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-            <p>Quer mestrar ou encontrar uma mesa que combine com você?</p>
-
-            <a
-              className="font-semibold text-primary transition-colors hover:text-primary-hover"
-              href="#contato"
-            >
-              Fale com o Valhalla →
-            </a>
-          </div>
         </div>
       </div>
     </section>
