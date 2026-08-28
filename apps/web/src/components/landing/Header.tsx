@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useState } from "react";
 
 const navItems = [
@@ -25,6 +26,14 @@ export function Header() {
           href="#inicio"
           onClick={() => setIsMenuOpen(false)}
         >
+          <Image
+            alt=""
+            className="size-11 shrink-0 object-contain transition-transform group-hover:scale-105 motion-reduce:transform-none sm:size-12"
+            height={48}
+            quality={90}
+            src="/images/valhalla-wolf.png"
+            width={48}
+          />
           <span>
             <span className="block font-display text-base font-semibold tracking-[0.16em] text-foreground sm:text-lg">
               Valhalla
