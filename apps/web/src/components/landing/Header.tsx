@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const navItems = [
   { label: "Sobre", href: "#sobre" },
@@ -12,6 +12,24 @@ const navItems = [
 
 export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!isMenuOpen) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+
+      setIsMenuOpen(false);
+      menuButtonRef.current?.focus();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isMenuOpen]);
 
   return (
     <header className="sticky top-0 z-50 border-b border-border/80 bg-background/85 backdrop-blur-xl">
@@ -77,6 +95,7 @@ export function Header() {
             aria-label={isMenuOpen ? "Fechar menu" : "Abrir menu"}
             className="valhalla-cut-corners grid size-11 place-items-center border border-border bg-surface text-foreground transition-colors hover:border-primary hover:text-primary lg:hidden"
             onClick={() => setIsMenuOpen((current) => !current)}
+            ref={menuButtonRef}
             type="button"
           >
             <svg
