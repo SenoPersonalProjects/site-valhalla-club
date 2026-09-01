@@ -7,35 +7,7 @@ import { TableCard, type RpgTable } from "./TableCard";
  * Dados estáticos enquanto a integração com a API de mesas
  * ainda não está disponível.
  */
-const tables: readonly RpgTable[] = [
-  {
-    id: "she-ra-protocolo-mecanus",
-    name: "She-Ra: Protocolo Mecanus",
-    system: "Corespring",
-    master: "Vitor",
-    status: "scheduled",
-    description:
-      "A Rebelião interceptou uma comunicação da Horda sobre um laboratório onde eles estão trabalhando com algo relacionado ao chamado Protocolo Mecanus. Agora, as princesas precisam ir até o local onde está esse laboratório para descobrir o que a Horda está tramando e impedi-los antes que seja tarde demais.",
-    mode: "Online",
-    location: "Discord do Club",
-    schedule: "27/08 · 14h",
-    frequency: "Sessão única",
-    seats: {
-      filled: 5,
-    },
-    players: ["Artemis", "Kauã", "Limas", "Elvis", "Bruna"],
-    tags: ["Fantasia", "+14", "Novatos bem-vindos", "Ficha pronta"],
-    contentWarning: "+14 — palavrões, bebidas alcoólicas e violência.",
-    image: {
-      src: "/images/tables/she-ra-protocolo-mecanus.png",
-      alt: "Arte da mesa She-Ra: Protocolo Mecanus.",
-      fit: "contain",
-    },
-    artwork: "citadel",
-    href: "#contato",
-    ctaLabel: "Falar com o Valhalla",
-  },
-];
+const tables: readonly RpgTable[] = [];
 
 export function TablesSection() {
   const [firstTable] = tables;
