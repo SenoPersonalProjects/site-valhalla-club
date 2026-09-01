@@ -8,14 +8,16 @@ import { TeamSection } from "@/components/landing/TeamSection";
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-background text-foreground">
+    <>
       <Header />
-      <HeroSection />
-      <AboutSection />
-      <NewsSection />
-      <TablesSection />
-      <TeamSection />
+      <main className="min-h-screen bg-background text-foreground">
+        <HeroSection />
+        <AboutSection />
+        <NewsSection />
+        <TablesSection />
+        <TeamSection />
+      </main>
       <Footer />
-    </main>
+    </>
   );
 }

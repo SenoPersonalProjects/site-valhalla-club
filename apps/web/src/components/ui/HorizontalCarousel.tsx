@@ -108,6 +108,9 @@ export function HorizontalCarousel({
   const [currentSlide, setCurrentSlide] =
     useState(0);
 
+  const [slidesInView, setSlidesInView] =
+    useState<number[] | null>(null);
+
   const [
     canScrollPrevious,
     setCanScrollPrevious,
@@ -147,6 +150,15 @@ export function HorizontalCarousel({
       setCanScrollNext(
         carouselApi.canScrollNext(),
       );
+
+      const visibleSlides =
+        carouselApi.slidesInView();
+
+      setSlidesInView(
+        visibleSlides.length > 0
+          ? visibleSlides
+          : null,
+      );
     };
 
     carouselApi.on(
@@ -156,6 +168,11 @@ export function HorizontalCarousel({
 
     carouselApi.on(
       "reInit",
+      updateCarouselState,
+    );
+
+    carouselApi.on(
+      "slidesInView",
       updateCarouselState,
     );
 
@@ -169,6 +186,11 @@ export function HorizontalCarousel({
 
       carouselApi.off(
         "reInit",
+        updateCarouselState,
+      );
+
+      carouselApi.off(
+        "slidesInView",
         updateCarouselState,
       );
     };
@@ -259,19 +281,29 @@ export function HorizontalCarousel({
       >
         <ul className="flex w-full touch-pan-y items-stretch gap-4 lg:gap-5">
           {physicalSlides.map(
-            (slide, index) => (
-              <li
-                aria-label={`${
-                  (index % itemCount) + 1
-                } de ${itemCount}`}
-                aria-roledescription="slide"
-                className={`flex min-w-0 max-w-full last:mr-4 lg:last:mr-5 ${slideClassName}`}
-                key={`carousel-physical-${index}`}
-                role="group"
-              >
-                {slide}
-              </li>
-            ),
+            (slide, index) => {
+              const isVisible =
+                slidesInView?.includes(index);
+
+              return (
+                <li
+                  aria-label={`${
+                    (index % itemCount) + 1
+                  } de ${itemCount}`}
+                  aria-roledescription="slide"
+                  className={`flex min-w-0 max-w-full last:mr-4 lg:last:mr-5 ${slideClassName}`}
+                  inert={
+                    isVisible === undefined
+                      ? undefined
+                      : !isVisible
+                  }
+                  key={`carousel-physical-${index}`}
+                  role="group"
+                >
+                  {slide}
+                </li>
+              );
+            },
           )}
         </ul>
       </div>
