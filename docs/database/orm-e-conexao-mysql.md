@@ -1,80 +1,37 @@
-# ORM e Estratégia de Conexão com MySQL
+# Prisma ORM e conexão com MySQL
 
-## ORM escolhido
+## Decisão arquitetural
 
-O projeto utilizará o Prisma ORM como ferramenta de integração entre a aplicação e o banco de dados MySQL.
+- Banco definido: **MySQL**.
+- ORM definido: **Prisma ORM**.
+- Conexão planejada: variável `DATABASE_URL`.
+- Alterações estruturais futuras: migrations Prisma versionadas.
 
-## Justificativa
-
-O Prisma foi escolhido por oferecer uma estrutura clara para definição dos modelos do banco de dados, além da experiência que a equipe já possui utilizando essa ferramenta.
-
-Além disso, o Prisma permite centralizar a modelagem do banco no arquivo `schema.prisma`, facilitando a manutenção, a leitura da estrutura das tabelas e a organização do projeto.
-
-Outro ponto é que o Prisma trabalha bem com versionamento de banco de dados, permitindo que alterações estruturais sejam registradas em migrations e acompanhadas pelo Git.
-
-## Banco de dados
-
-O banco de dados definido para o projeto é MySQL.
-
-A conexão com o banco será feita através da variável de ambiente `DATABASE_URL`.
-
-Formato esperado:
+Formato planejado de conexão:
 
 ```env
-DATABASE_URL="mysql://usuario:senha@host:porta/nome_do_banco"
+DATABASE_URL=mysql://usuario:senha@host:porta/nome_do_banco
 ```
 
-A variável real deve ficar no arquivo `.env`, que não deve ser versionado no Git.
+## Status da implementação
 
-Para documentação da configuração, será utilizado o arquivo `.env.example`, contendo apenas valores de exemplo.
+| Item | Estado atual |
+| --- | --- |
+| Decisão MySQL/Prisma | Definida |
+| Dependências Prisma | Não instaladas |
+| Integração Prisma na API | Não implementada |
+| `prisma/schema.prisma` | Não existe no repositório |
+| `prisma/migrations/` | Não existe no repositório |
+| Uso pelo MVP público | Não necessário |
 
-## Estratégia de migrations
+A API atual é uma base NestJS com `/` e `/health`; ela não lê `DATABASE_URL` nem implementa autenticação ou entidades.
 
-As alterações estruturais do banco de dados deverão ser feitas utilizando migrations do Prisma.
+## Implementação futura
 
-Em ambiente de desenvolvimento, o fluxo será:
+Quando a fase de dados for iniciada, o projeto deve adicionar a dependência e a configuração Prisma, criar `prisma/schema.prisma` e versionar `prisma/migrations/`. Depois disso, o fluxo esperado será criar migrations durante o desenvolvimento e aplicar migrations já versionadas nos ambientes de release.
 
-```bash
-npx prisma migrate dev --name nome_da_migration
-```
+Não apresentar `npx prisma migrate dev` ou `npx prisma migrate deploy` como comandos disponíveis antes dessa implementação. Não usar `prisma db push` em produção.
 
-Esse comando cria uma nova migration com base nas alterações realizadas no arquivo `schema.prisma`.
+## Segurança
 
-Em ambiente de homologação ou produção, o fluxo será:
-
-```bash
-npx prisma migrate deploy
-```
-
-### Explicação dos comandos 
-
-migrate dev
-Cria migration nova + aplica no banco local.
-Usado pelo desenvolvedor durante o desenvolvimento.
-
-migrate deploy
-Não cria migration nova.
-Só aplica migrations já existentes.
-Usado em produção.
-
-## Regras definidas
-
-* O Prisma será utilizado como ORM do projeto.
-* O banco de dados será MySQL.
-* A conexão será configurada usando a variável `DATABASE_URL`.
-* O arquivo `.env` não deve ser commitado.
-* O arquivo `.env.example` deve conter apenas valores de exemplo.
-* Toda alteração estrutural no banco deve passar por migration.
-* A pasta de migrations deve ser versionada no Git.
-* Não alterar tabelas manualmente em produção.
-* Não usar `prisma db push` em produção, pois esse comando aplica o schema diretamente no banco sem criar uma migration versionada.
-
-## Arquivos relacionados
-
-```txt
-prisma/schema.prisma
-prisma/migrations/
-.env
-.env.example
-docs/database/orm-e-conexao-mysql.md
-```
+O valor real de `DATABASE_URL` deve ficar em `.env`, fora do Git. `.env.example` deve conter somente valores seguros de exemplo.
