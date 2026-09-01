@@ -1,244 +1,76 @@
 # Site Valhalla Club
 
-Repositório oficial do site do **Valhalla Clube**, clube de RPG de mesa de Aracaju, Sergipe.
+Site institucional do Valhalla Club, comunidade de RPG de mesa de Aracaju, Sergipe. Apresenta a marca, a história do clube, eventos, mesas vigentes, envolvidos e contato.
 
-## Sobre o projeto
+## Estado atual
 
-O Site Valhalla Club tem como objetivo apresentar a marca Valhalla, divulgar notícias e eventos, exibir informações sobre a equipe e, futuramente, oferecer um sistema de gerenciamento de mesas de RPG.
+O MVP institucional está **homologado e em preparação para produção**. A publicação no Netlify ainda não ocorreu.
+
+## MVP implementado
+
+- Header, navegação interna e menu mobile;
+- Hero, Sobre, Eventos, Mesas rolando, Envolvidos e Contato/Footer;
+- conteúdo institucional e eventos estáticos;
+- estado vazio para Mesas quando não existem mesas vigentes;
+- identidade visual responsiva;
+- SEO básico e acessibilidade básica.
+
+A landing pública não depende da API em runtime.
 
 ## Stack
 
-- Front-End: NextJS
-- Back-End: NestJS
-- Banco de Dados: MySQL
-- Versionamento: GitHub
-- Gerenciamento de tarefas: ClickUp
+| Área | Tecnologias e estado |
+| --- | --- |
+| Front-end | Next.js 16, React 19, TypeScript, Tailwind CSS 4, App Router e Embla Carousel |
+| Back-end | NestJS 11 e TypeScript; base com rotas `/` e `/health` |
+| Banco | MySQL definido; Prisma ORM definido para a fase de dados, sem integração, schema ou migrations no repositório |
+| Gestão | GitHub e ClickUp |
 
-## Aplicações
+## Estrutura
 
-- `apps/web`: front-end em Next.js, TypeScript, Tailwind CSS e App Router.
-- `apps/api`: API back-end do projeto em NestJS.
-
-## Setup local
-
-Para configurar o projeto localmente, siga o guia:
-
-[Guia de Setup Local](docs/setup-local.md)
-
-## Fluxo de branches
-
-O projeto usa o seguinte fluxo:
-
-- `main`: branch de produção.
-- `develop`: branch de integração, homologação e preparação antes de produção.
-
-## Fluxo de trabalho
-
-1. Toda tarefa deve ser desenvolvida em uma branch própria.
-2. Toda branch de tarefa deve sair da `develop`.
-3. Após finalizar uma tarefa, abrir Pull Request para `develop`.
-4. O tech lead revisa e testa a `develop`.
-5. Se estiver tudo certo, `develop` é enviada para `main`.
-6. Após o merge na `main`, se necessário, a `main` deve ser sincronizada de volta na `develop`.
-
-## Exemplos de fluxo
-
-### Front-end
-
-```txt
-front/header-landing-page -> develop -> main
+```text
+apps/
+  web/                 # landing Next.js
+  api/                 # base NestJS
+docs/                  # documentação do projeto
+.github/               # template de Pull Request
 ```
 
-### Back-end
+## Como rodar
 
-```txt
-back/health-check -> develop -> main
+Consulte o [guia de setup local](docs/setup-local.md). Cada app possui seu próprio `package.json` e `.env.example`.
+
+No front-end, `SITE_URL` define canonical, Open Graph e JSON-LD. Em produção, use a URL HTTPS pública real do deploy.
+
+## Documentação
+
+- [MVP: escopo, estado e roadmap](docs/mvp.md)
+- [Setup local](docs/setup-local.md)
+- [Briefing inicial e evolução](docs/briefing.md)
+- [Orientações para agentes e colaboradores](docs/AGENTS.md)
+- [Design system](docs/design-system.md)
+- [Header e Hero](docs/header-hero-landing.md)
+- [Prisma ORM e MySQL](docs/database/orm-e-conexao-mysql.md)
+- [Preparação de deploy no Netlify](docs/deploy-netlify.md)
+- [README do front-end](apps/web/README.md)
+- [README da API](apps/api/README.md)
+
+## Fluxo Git
+
+```text
+task branch → develop → main
 ```
 
-### Banco de Dados
+- `main`: produção;
+- `develop`: integração e homologação;
+- task branches saem de `develop` e abrem PR para `develop`;
+- `develop` só segue para `main` após validação;
+- não fazer push direto em `develop` ou `main`.
 
-```txt
-db/schema-inicial -> develop -> main
-```
+## Roadmap
 
-### Documentação
+**MVP atual:** landing institucional homologada, com conteúdo estático.
 
-```txt
-docs/guia-setup-local -> develop -> main
-```
+**Próxima fase:** autenticação, usuários, perfis de mestres, gerenciamento de mesas, participação de jogadores e calendário.
 
-### Configuração
-
-```txt
-chore/configurar-eslint -> develop -> main
-```
-
-## Padrão de nomes das branches
-
-### Front-end
-
-```txt
-front/nome-da-tarefa
-```
-
-Exemplos:
-
-```txt
-front/header-landing-page
-front/secao-hero
-front/tela-login
-front/listagem-mesas
-```
-
-### Back-end
-
-```txt
-back/nome-da-tarefa
-```
-
-Exemplos:
-
-```txt
-back/health-check
-back/modulo-usuarios
-back/auth-login
-back/modulo-mesas
-```
-
-### Banco de Dados
-
-```txt
-db/nome-da-tarefa
-```
-
-Exemplos:
-
-```txt
-db/schema-inicial
-db/modelagem-usuarios
-db/modelagem-mesas
-```
-
-### Documentação
-
-```txt
-docs/nome-da-tarefa
-```
-
-Exemplos:
-
-```txt
-docs/guia-setup-local
-docs/padrao-branches
-```
-
-### Configuração
-
-```txt
-chore/nome-da-tarefa
-```
-
-Exemplos:
-
-```txt
-chore/configurar-eslint
-chore/configurar-prettier
-chore/configurar-env
-```
-
-### Correções
-
-```txt
-fix/nome-da-correcao
-```
-
-Exemplos:
-
-```txt
-fix/responsividade-header
-fix/erro-login
-fix/bug-listagem-mesas
-```
-
-## Padrão de commits
-
-O projeto usa commits claros e objetivos, seguindo este padrão:
-
-```txt
-tipo: descrição da alteração
-```
-
-Tipos mais usados:
-
-- `feat`: nova funcionalidade.
-- `fix`: correção de erro.
-- `docs`: alteração em documentação.
-- `chore`: configuração, manutenção ou ajustes internos.
-- `style`: ajustes visuais ou de formatação.
-- `refactor`: melhoria interna no código sem alterar comportamento.
-- `test`: criação ou ajuste de testes.
-
-Exemplos:
-
-```txt
-feat: criar header da landing page
-fix: corrigir responsividade do header
-docs: adicionar guia de setup local
-chore: configurar eslint no projeto
-```
-
-## Regras importantes
-
-* Não fazer push direto na `main`.
-* Não fazer push direto na `develop`.
-* Cada tarefa deve ter uma branch própria.
-* Toda Pull Request precisa estar relacionada a uma tarefa ou alteração clara.
-* Antes de abrir uma Pull Request, o responsável deve rodar o projeto localmente e testar o que foi feito.
-* Ao finalizar o desenvolvimento, a Pull Request deve ser enviada para revisão/homologação.
-* O merge para `main` só deve ser feito após validação do tech lead.
-
-## Exemplos práticos
-
-### Criando uma branch de front-end
-
-```bash
-git checkout develop
-git pull origin develop
-git checkout -b front/header-landing-page
-```
-
-Depois de desenvolver:
-
-```bash
-git add .
-git commit -m "feat: criar header da landing page"
-git push origin front/header-landing-page
-```
-
-Abrir Pull Request:
-
-```txt
-front/header-landing-page -> develop
-```
-
-### Criando uma branch de back-end
-
-```bash
-git checkout develop
-git pull origin develop
-git checkout -b back/health-check
-```
-
-Depois de desenvolver:
-
-```bash
-git add .
-git commit -m "feat: criar endpoint de health check"
-git push origin back/health-check
-```
-
-Abrir Pull Request:
-
-```txt
-back/health-check -> develop
-```
+**Futuro:** mesas pagas, pagamentos, integrações e ferramentas específicas de RPG.
