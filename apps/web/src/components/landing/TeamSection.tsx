@@ -1,4 +1,7 @@
+"use client";
+
 import Image from "next/image";
+import { useState } from "react";
 
 import { SectionHeader } from "@/components/ui/SectionHeader";
 
@@ -27,27 +30,23 @@ const responsiveMemberCardWidth =
 
 const roles: Record<
   TeamRole,
-  { label: string; badgeLabel: string; description: string }
+  { label: string; badgeLabel: string }
 > = {
   leader: {
     label: "Liderança",
     badgeLabel: "Líder",
-    description: "Direção institucional do Valhalla Club.",
   },
   admin: {
     label: "Administradores",
     badgeLabel: "Administrador",
-    description: "Organização e funcionamento do clube.",
   },
   master: {
     label: "Mestres Oficiais",
     badgeLabel: "Mestre Oficial",
-    description: "Condução das mesas e atividades oficiais.",
   },
   developer: {
     label: "Desenvolvedores",
     badgeLabel: "Desenvolvedor",
-    description: "Criação das soluções digitais do Valhalla.",
   },
 };
 
@@ -174,13 +173,6 @@ const memberGroups = roleOrder
   }))
   .filter((group) => group.members.length > 0);
 
-const roleCounts = Object.fromEntries(
-  roleOrder.map((role) => [
-    role,
-    teamMembers.filter((member) => member.primaryRole === role).length,
-  ]),
-) as Record<TeamRole, number>;
-
 function RoleIcon({
   role,
   className = "h-5 w-5",
@@ -250,8 +242,8 @@ function MemberAvatar({
   const isFeatured = variant === "featured";
   const imageSize = 96;
   const avatarClassName = isFeatured
-    ? "h-20 w-20 rounded-full border border-primary/40 bg-secondary sm:h-24 sm:w-24"
-    : "h-16 w-16 rounded-full border border-primary/40 bg-secondary sm:h-24 sm:w-24";
+    ? "h-16 w-16 rounded-full border border-primary/40 bg-secondary sm:h-24 sm:w-24"
+    : "h-14 w-14 rounded-full border border-primary/40 bg-secondary sm:h-24 sm:w-24";
 
   if (member.image) {
     return (
@@ -262,8 +254,8 @@ function MemberAvatar({
         quality={90}
         sizes={
           isFeatured
-            ? "(min-width: 640px) 96px, 80px"
-            : "(min-width: 640px) 96px, 64px"
+            ? "(min-width: 640px) 96px, 64px"
+            : "(min-width: 640px) 96px, 56px"
         }
         src={member.image}
         width={imageSize}
@@ -293,35 +285,41 @@ function MemberCard({
     (role) => role !== member.primaryRole,
   );
   const cardClassName = isFeatured
-    ? "relative flex w-full max-w-lg items-center gap-5 overflow-hidden rounded-lg border border-primary/40 bg-surface-elevated p-5 transition-colors hover:border-primary sm:min-h-40"
-    : `relative flex w-full items-start gap-4 overflow-hidden rounded-lg border border-border bg-surface-elevated p-4 transition-colors hover:border-primary/50 sm:min-h-68 sm:flex-col sm:items-center sm:justify-start sm:gap-0 sm:p-5 sm:text-center ${responsiveMemberCardWidth}`;
+    ? "relative flex w-full max-w-lg items-center gap-3 overflow-hidden rounded-lg border border-primary/40 bg-surface-elevated p-4 transition-colors hover:border-primary sm:min-h-40 sm:gap-5 sm:p-5"
+    : `relative flex w-full items-center gap-3 overflow-hidden rounded-lg border border-border bg-surface-elevated p-3 transition-colors hover:border-primary/50 sm:min-h-68 sm:flex-col sm:items-center sm:justify-start sm:gap-0 sm:p-5 sm:text-center ${responsiveMemberCardWidth}`;
 
   return (
     <article className={cardClassName}>
-      <div className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full border border-primary/30 bg-secondary text-primary">
+      <div className="absolute right-3 top-3 hidden h-8 w-8 items-center justify-center rounded-full border border-primary/30 bg-secondary text-primary sm:flex">
         <RoleIcon className="h-4 w-4" role={member.primaryRole} />
       </div>
 
       <MemberAvatar member={member} variant={variant} />
 
       <div
-        className={`min-w-0 flex-1 pr-8 ${isFeatured ? "" : "sm:mt-5 sm:flex-none sm:pr-0"}`}
+        className={`min-w-0 flex-1 ${isFeatured ? "sm:pr-8" : "sm:mt-5 sm:w-full sm:flex-none sm:pr-0"}`}
       >
-        <h4 className="break-words font-display text-base font-semibold text-pretty text-foreground sm:text-lg">
+        <h4
+          className="truncate whitespace-nowrap font-display text-base font-semibold text-foreground sm:text-lg"
+          title={member.name}
+        >
           {member.name}
         </h4>
-        <p className="mt-1.5 text-pretty text-xs leading-5 text-primary sm:text-sm">
+        <p
+          className="mt-1 truncate whitespace-nowrap text-xs leading-5 text-primary sm:mt-1.5 sm:text-sm"
+          title={member.title}
+        >
           {member.title}
         </p>
 
         {additionalRoles.length > 0 && (
           <ul
             aria-label={`Outras funções de ${member.name}`}
-            className={`mt-3 flex flex-wrap gap-1.5 ${isFeatured ? "" : "sm:justify-center"}`}
+            className={`mt-2 flex flex-wrap gap-1 sm:mt-3 sm:gap-1.5 ${isFeatured ? "" : "sm:justify-center"}`}
           >
             {additionalRoles.map((role) => (
               <li
-                className="rounded-full border border-primary/30 bg-secondary px-2.5 py-1 text-xs text-secondary-foreground"
+                className="rounded-full border border-primary/30 bg-secondary px-2 py-0.5 text-[0.6875rem] leading-4 text-secondary-foreground sm:px-2.5 sm:py-1 sm:text-xs"
                 key={role}
               >
                 {roles[role].badgeLabel}
@@ -335,6 +333,8 @@ function MemberCard({
 }
 
 export function TeamSection() {
+  const [openRole, setOpenRole] = useState<TeamRole | null>("leader");
+
   return (
     <section
       aria-labelledby="equipe-heading"
@@ -357,97 +357,98 @@ export function TeamSection() {
             title="Envolvidos"
           />
 
-          <ul
-            aria-label="Áreas de atuação do Valhalla Club"
-            className="relative mt-10 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border lg:grid-cols-4"
-          >
-            {roleOrder.map((role) => (
-              <li
-                className="min-w-0 bg-surface-elevated p-4 sm:p-5"
-                key={role}
-              >
-                <div className="flex items-center gap-2.5 text-primary">
-                  <RoleIcon className="h-4 w-4 shrink-0" role={role} />
-                  <h3 className="min-w-0 break-words font-display text-xs font-semibold text-foreground sm:text-[0.8125rem] xl:text-sm">
-                    {roles[role].label}
-                  </h3>
-                  {roleCounts[role] > 0 && (
-                    <span
-                      aria-label={`${roleCounts[role]} pessoas nesta categoria`}
-                      className="ml-auto text-xs tabular-nums text-muted-foreground"
+          <div className="relative mt-10 space-y-3 sm:mt-14 sm:space-y-12">
+            {memberGroups.map(({ role, members }) => {
+              const isOpen = openRole === role;
+
+              return (
+                <section aria-labelledby={`team-role-${role}`} key={role}>
+                  <h3 className="scroll-mt-24" id={`team-role-${role}`}>
+                    <button
+                      aria-controls={`team-role-panel-${role}`}
+                      aria-expanded={isOpen}
+                      className={`valhalla-cut-corners flex min-h-14 w-full touch-manipulation items-center gap-2 border px-3 py-2.5 text-left transition-[border-color,background-color] focus-visible:outline-2 focus-visible:outline-primary motion-reduce:transition-none sm:hidden ${
+                        isOpen
+                          ? "border-primary/70 bg-primary/10"
+                          : "border-border bg-surface-elevated"
+                      }`}
+                      onClick={() =>
+                        setOpenRole((currentRole) =>
+                          currentRole === role ? null : role,
+                        )
+                      }
+                      type="button"
                     >
-                      {roleCounts[role]}
+                      <span className="valhalla-cut-corners flex h-9 w-9 shrink-0 items-center justify-center border border-primary/40 bg-secondary text-primary">
+                        <RoleIcon className="h-4 w-4" role={role} />
+                      </span>
+
+                      <span className="whitespace-nowrap font-display text-[0.8125rem] font-semibold uppercase tracking-wide text-foreground min-[360px]:text-sm">
+                        {roles[role].label}
+                      </span>
+
+                      <span
+                        aria-hidden="true"
+                        className={`h-px min-w-2 flex-1 transition-colors ${
+                          isOpen ? "bg-primary/60" : "bg-border"
+                        }`}
+                      />
+
+                      <span className="valhalla-cut-corners flex h-8 w-8 shrink-0 items-center justify-center border border-primary/30 text-primary">
+                        <svg
+                          aria-hidden="true"
+                          className={`h-4 w-4 transition-transform duration-200 motion-reduce:transition-none ${
+                            isOpen ? "rotate-180" : ""
+                          }`}
+                          fill="none"
+                          stroke="currentColor"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="1.8"
+                          viewBox="0 0 24 24"
+                        >
+                          <path d="m6 9 6 6 6-6" />
+                        </svg>
+                      </span>
+                    </button>
+
+                    <span className="hidden items-center gap-3 sm:flex">
+                      <RoleIcon
+                        className="h-5 w-5 shrink-0 text-primary"
+                        role={role}
+                      />
+                      <span className="font-display text-lg font-semibold uppercase tracking-wide text-balance text-foreground sm:text-xl">
+                        {roles[role].label}
+                      </span>
+                      <span
+                        aria-hidden="true"
+                        className="h-px flex-1 bg-border"
+                      />
+                      <span className="text-xs tabular-nums text-muted-foreground">
+                        {members.length}
+                      </span>
                     </span>
-                  )}
-                </div>
-                <p className="mt-3 hidden text-sm leading-6 text-muted-foreground sm:block">
-                  {roles[role].description}
-                </p>
-              </li>
-            ))}
-          </ul>
-
-          <div className="relative mt-12 space-y-12 sm:mt-14">
-            {memberGroups.map(({ role, members }) => (
-              <section aria-labelledby={`team-role-${role}`} key={role}>
-                <div className="flex items-center gap-3">
-                  <RoleIcon
-                    className="h-5 w-5 shrink-0 text-primary"
-                    role={role}
-                  />
-                  <h3
-                    className="scroll-mt-24 font-display text-lg font-semibold uppercase tracking-wide text-balance text-foreground sm:text-xl"
-                    id={`team-role-${role}`}
-                  >
-                    {roles[role].label}
                   </h3>
-                  <span aria-hidden="true" className="h-px flex-1 bg-border" />
-                  <span className="text-xs tabular-nums text-muted-foreground">
-                    {members.length}
-                  </span>
-                </div>
 
-                <div className="mt-5 flex flex-wrap justify-center gap-3">
-                  {members.map((member) => (
-                    <MemberCard
-                      key={member.id}
-                      member={member}
-                      variant={role === "leader" ? "featured" : "standard"}
-                    />
-                  ))}
-                </div>
-              </section>
-            ))}
-          </div>
-
-          <div className="relative mt-8 flex flex-col gap-5 rounded-lg border border-border bg-surface-elevated p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
-            <div className="flex items-center gap-4">
-              <div
-                aria-hidden="true"
-                className="flex h-11 w-11 shrink-0 rotate-45 items-center justify-center border border-primary/40 bg-secondary text-primary"
-              >
-                <RoleIcon
-                  className="h-5 w-5 -rotate-45"
-                  role="developer"
-                />
-              </div>
-              <div className="min-w-0">
-                <p className="font-display text-base font-semibold text-foreground sm:text-lg">
-                  Quer fazer parte do Valhalla Club?
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Entre em contato e conheça nossa comunidade.
-                </p>
-              </div>
-            </div>
-
-            <a
-              className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-primary/60 px-5 py-3 text-sm font-semibold uppercase tracking-wide text-primary transition-colors hover:border-primary hover:bg-primary hover:text-primary-foreground sm:w-auto"
-              href="#contato"
-            >
-              Fale conosco
-              <span aria-hidden="true">→</span>
-            </a>
+                  <div
+                    aria-labelledby={`team-role-${role}`}
+                    className={`${
+                      isOpen ? "mt-3 flex" : "hidden"
+                    } ml-4 flex-wrap justify-center gap-2 border-l border-primary/30 pl-3 sm:ml-0 sm:mt-5 sm:flex sm:gap-3 sm:border-l-0 sm:pl-0`}
+                    id={`team-role-panel-${role}`}
+                    role="region"
+                  >
+                    {members.map((member) => (
+                      <MemberCard
+                        key={member.id}
+                        member={member}
+                        variant={role === "leader" ? "featured" : "standard"}
+                      />
+                    ))}
+                  </div>
+                </section>
+              );
+            })}
           </div>
         </div>
       </div>
