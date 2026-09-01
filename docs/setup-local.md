@@ -1,316 +1,77 @@
-# Guia de Setup Local
-
-Este guia explica como configurar o ambiente local para rodar o projeto **Site Valhalla Club**.
+# Guia de setup local
 
 ## Pré-requisitos
 
-Antes de começar, é necessário ter instalado:
+- Node.js e npm;
+- Git;
+- acesso ao repositório privado no GitHub;
+- MySQL somente quando for trabalhar na futura fase de backend/database.
 
-- Node.js
-- npm
-- Git
-- VS Code
-- MySQL
-
-Também é recomendado ter instalado:
-
-- GitHub Desktop ou GitHub CLI
-- Extensões do VS Code para TypeScript, ESLint e Prettier
-
-## 1. Clonar o repositório
-
-Abra o terminal e execute:
+## Clone
 
 ```bash
-git clone URL_DO_REPOSITORIO
-```
-
-Depois, acesse a pasta do projeto:
-
-```bash
+git clone https://github.com/SenoPersonalProjects/site-valhalla-club.git
 cd site-valhalla-club
 ```
 
-Caso ainda não tenha a URL do repositório, copie no GitHub através do botão **Code**.
-
-## 2. Estrutura do projeto
-
-O projeto está organizado da seguinte forma:
-
-```txt
-site-valhalla-club/
-├─ apps/
-│  ├─ web/    # Front-end em NextJS
-│  └─ api/    # Back-end em NestJS
-├─ docs/      # Documentação do projeto
-└─ README.md
-```
-
-## 3. Instalar dependências do front-end
-
-Acesse a pasta do front-end:
+## Front-end
 
 ```bash
 cd apps/web
-```
-
-Instale as dependências:
-
-```bash
 npm install
 ```
 
-Depois, volte para a raiz do projeto:
-
-```bash
-cd ../..
-```
-
-## 4. Instalar dependências do back-end
-
-Acesse a pasta do back-end:
-
-```bash
-cd apps/api
-```
-
-Instale as dependências:
-
-```bash
-npm install
-```
-
-Depois, volte para a raiz do projeto:
-
-```bash
-cd ../..
-```
-
-## 5. Configurar variáveis de ambiente
-
-O projeto usa arquivos `.env` para configurar informações sensíveis e específicas de cada ambiente.
-
-Esses arquivos não devem ser enviados para o GitHub.
-
-Cada aplicação deve ter seu próprio arquivo `.env`.
-
-## 6. Configurar `.env` do front-end
-
-Acesse a pasta do front-end:
-
-```bash
-cd apps/web
-```
-
-Crie um arquivo chamado:
-
-```txt
-.env.local
-```
-
-Exemplo inicial:
+Crie `.env.local` a partir de `.env.example` e ajuste as variáveis existentes:
 
 ```env
+SITE_URL=http://localhost:3000
 NEXT_PUBLIC_API_URL=http://localhost:3001
+NEXT_PUBLIC_APP_NAME=Site Valhalla Club
+NEXT_PUBLIC_APP_ENV=development
 ```
 
-Depois, volte para a raiz:
+Execute:
 
 ```bash
-cd ../..
+npm run dev
+npm run lint
+npm run build
 ```
 
-## 7. Configurar `.env` do back-end
+O front-end local usa `http://localhost:3000`. No MVP público atual, `NEXT_PUBLIC_API_URL` não é consumida pela landing em runtime. Em produção, `SITE_URL` deve receber a URL HTTPS pública real, pois alimenta canonical, Open Graph e JSON-LD.
 
-Acesse a pasta do back-end:
+## Back-end
 
 ```bash
 cd apps/api
+npm install
 ```
 
-Crie um arquivo chamado:
-
-```txt
-.env
-```
-
-Exemplo inicial:
+Crie `.env` a partir de `.env.example`. As variáveis documentadas atualmente são:
 
 ```env
 PORT=3001
+NODE_ENV=development
 DATABASE_URL=mysql://usuario:senha@localhost:3306/valhalla
 JWT_SECRET=change-me
+JWT_EXPIRES_IN=1d
+FRONTEND_URL=http://localhost:3000
+CORS_ORIGIN=http://localhost:3000
 ```
 
-Atenção: altere `usuario`, `senha` e o nome do banco conforme a configuração local do seu MySQL.
-
-Depois, volte para a raiz:
-
-```bash
-cd ../..
-```
-
-## 8. Configurar banco de dados local
-
-Crie um banco de dados MySQL local para o projeto.
-
-Exemplo:
-
-```sql
-CREATE DATABASE valhalla;
-```
-
-Caso o projeto use ORM, as instruções de migration devem ser adicionadas aqui posteriormente.
-
-Exemplo futuro com migrations:
-
-```bash
-npm run migration:run
-```
-
-Exemplo futuro com Prisma:
-
-```bash
-npx prisma migrate dev
-```
-
-A definição final depende do ORM escolhido pelo time.
-
-## 9. Rodar o front-end localmente
-
-Acesse a pasta do front-end:
-
-```bash
-cd apps/web
-```
-
-Rode o projeto:
-
-```bash
-npm run dev
-```
-
-O front-end deve ficar disponível em:
-
-```txt
-http://localhost:3000
-```
-
-## 10. Rodar o back-end localmente
-
-Em outro terminal, acesse a pasta do back-end:
-
-```bash
-cd apps/api
-```
-
-Rode o projeto:
+Execute:
 
 ```bash
 npm run start:dev
+npm run build
 ```
 
-O back-end deve ficar disponível em:
+A API atual escuta `PORT` (ou 3000 se ela não for definida) e expõe `/` e `/health`. As variáveis de banco, JWT, CORS e front-end estão presentes no exemplo para a evolução da API, mas não correspondem a autenticação, banco ou CORS configurados no código atual.
 
-```txt
-http://localhost:3001
-```
+## MySQL e Prisma ORM
 
-Caso exista endpoint de health check, teste:
+MySQL é o banco definido e Prisma ORM é a decisão para a fase de dados. Atualmente não existem dependências Prisma, `prisma/schema.prisma` ou migrations. Portanto, não há comandos Prisma executáveis neste repositório ainda. Consulte [a documentação de banco](database/orm-e-conexao-mysql.md).
 
-```txt
-http://localhost:3001/health
-```
+## Testes da API
 
-Resposta esperada:
-
-```json
-{
-  "status": "ok",
-  "service": "valhalla-api"
-}
-```
-
-## 11. Rodar front-end e back-end ao mesmo tempo
-
-Abra dois terminais no VS Code.
-
-No primeiro terminal, rode o front-end:
-
-```bash
-cd apps/web
-npm run dev
-```
-
-No segundo terminal, rode o back-end:
-
-```bash
-cd apps/api
-npm run start:dev
-```
-
-URLs esperadas:
-
-```txt
-Front-end: http://localhost:3000
-Back-end: http://localhost:3001
-```
-
-## 12. Problemas comuns
-
-### Porta já está em uso
-
-Se aparecer erro dizendo que a porta já está em uso, verifique se já existe outro processo rodando.
-
-Portas usadas pelo projeto:
-
-```txt
-3000 -> front-end
-3001 -> back-end
-```
-
-### Dependências com erro
-
-Tente apagar `node_modules` e instalar novamente:
-
-```bash
-rm -rf node_modules
-npm install
-```
-
-No Windows, se o comando acima não funcionar, apague a pasta `node_modules` manualmente.
-
-### Arquivo .env não encontrado
-
-Confira se os arquivos foram criados nos lugares corretos:
-
-```txt
-apps/web/.env.local
-apps/api/.env
-```
-
-### API não conecta no banco
-
-Confira:
-
-```txt
-- Se o MySQL está rodando
-- Se o banco valhalla existe
-- Se usuário e senha estão corretos
-- Se a DATABASE_URL está correta
-```
-
-## 13. Checklist final
-
-Antes de começar uma tarefa, confirme:
-
-```md
-- [ ] Repositório clonado.
-- [ ] Dependências do front-end instaladas.
-- [ ] Dependências do back-end instaladas.
-- [ ] `.env.local` do front-end criado.
-- [ ] `.env` do back-end criado.
-- [ ] Banco de dados local criado.
-- [ ] Front-end rodando em `http://localhost:3000`.
-- [ ] Back-end rodando em `http://localhost:3001`.
-```
+Os scripts existentes incluem `npm run lint`, `npm run test`, `npm run test:e2e` e `npm run build`. O script de lint da API contém `--fix`; não o execute em uma auditoria ou revisão sem autorização para escrita.
