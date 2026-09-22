@@ -1,0 +1,11 @@
+// O schema deve permanecer portavel: evite tipos nativos, extensoes e SQL
+// especificos do PostgreSQL sem uma decisao arquitetural documentada.
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
