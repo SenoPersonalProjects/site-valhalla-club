@@ -22,10 +22,10 @@ Jogadores e mestres de RPG, pessoas interessadas em conhecer a comunidade, parti
 | --- | --- |
 | Front-end | Next.js, React, TypeScript e Tailwind CSS |
 | Back-end | NestJS e TypeScript |
-| Banco | MySQL; Prisma ORM definido para a fase de dados |
+| Banco | PostgreSQL em homologação; Prisma ORM integrado, com portabilidade futura para MySQL |
 | Gestão | GitHub e ClickUp |
 
-Prisma e MySQL são decisões tomadas, mas Prisma ainda não foi integrado ao código e não há schema ou migrations.
+A camada Prisma está integrada à API e configurada para PostgreSQL. O schema ainda não possui modelos de domínio nem migrations; esses artefatos serão adicionados com as regras da próxima fase. A portabilidade para MySQL orienta a modelagem, mas uma troca futura exigirá configuração e histórico de migrations próprios.
 
 ## Equipe e responsabilidades
 
