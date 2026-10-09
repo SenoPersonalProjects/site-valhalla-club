@@ -9,7 +9,7 @@ Este documento registra a configuração confirmada para a publicação planejad
 - branch de produção: `main`;
 - plataforma: Netlify.
 
-O repositório contém também `apps/api`, mas a landing pública do MVP não depende da API, PostgreSQL ou Prisma em build nem em runtime.
+O repositório contém também `apps/api`, mas a landing pública do MVP não depende da API, MySQL ou Prisma em build nem em runtime.
 
 ## Configuração do projeto no Netlify
 

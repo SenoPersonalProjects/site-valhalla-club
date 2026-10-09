@@ -18,15 +18,15 @@ O valor real de homologação deve ser solicitado ao Tech Lead. O exemplo usa `l
 
 ## Estado da implementação
 
-| Item                                     | Estado atual                                   |
-| ---------------------------------------- | ---------------------------------------------- |
-| Dependências Prisma e adapter PostgreSQL | Instaladas                                     |
-| `prisma/schema.prisma`                   | Criado com provider PostgreSQL                 |
-| Integração com NestJS                    | `PrismaModule` e `PrismaService` implementados |
-| Carregamento de `.env`                   | Configurado com `ConfigModule`                 |
-| Modelos de domínio                       | Aguardando definição                           |
-| `prisma/migrations/`                     | Aguardando o primeiro modelo aprovado          |
-| Conexão de homologação                   | Pendente da `DATABASE_URL` real                |
+| Item                                     | Estado atual                                         |
+| ---------------------------------------- | ---------------------------------------------------- |
+| Dependências Prisma e adapter PostgreSQL | Instaladas                                           |
+| `prisma/schema.prisma`                   | Criado com provider PostgreSQL                       |
+| Integração com NestJS                    | `PrismaModule` e `PrismaService` implementados       |
+| Carregamento de `.env`                   | Configurado com `ConfigModule`                       |
+| Modelos de domínio                       | Aguardando definição                                 |
+| `prisma/migrations/`                     | Aguardando o primeiro modelo aprovado                |
+| Conexão de homologação                   | Validada com o PostgreSQL de homologação no Supabase |
 
 A API abre a conexão no início da aplicação e a encerra durante o shutdown. Os testes e2e substituem o serviço de banco por um mock para continuarem determinísticos e independentes de infraestrutura externa.
 
@@ -73,4 +73,8 @@ Até essa decisão, os modelos devem evitar tipos nativos `@db.*`, arrays exclus
 
 ## Segurança
 
-Nunca versione `.env`, credenciais ou a `DATABASE_URL` real. Antes de considerar a conexão validada, execute `npm run prisma:migrate:status` com a URL fornecida pelo Tech Lead e registre o resultado no PR ou no ClickUp sem expor o segredo.
+Nunca versione `.env`, credenciais ou a `DATABASE_URL` real.
+
+A conexão de homologação foi validada com `npm run prisma:migrate:status` utilizando a `DATABASE_URL` configurada para o Supabase, sem versionar ou expor a credencial.
+
+Novas validações ou evidências registradas em Pull Requests, ClickUp ou logs não devem incluir a URL completa, senha ou qualquer outro segredo de conexão.
