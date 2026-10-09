@@ -12,6 +12,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { StructuredLoggerService } from './../src/observability/structured-logger.service';
+import { PrismaService } from './../src/prisma/prisma.service';
 
 const UUID_V4_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -67,10 +68,16 @@ describe('AppController (e2e)', () => {
       warn: jest.fn<LogMethod>(),
       error: jest.fn<LogMethod>(),
     };
+
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
       controllers: [ErrorTestController, ObservabilityTestController],
     })
+      .overrideProvider(PrismaService)
+      .useValue({
+        onModuleInit: jest.fn(),
+        onModuleDestroy: jest.fn(),
+      })
       .overrideProvider(StructuredLoggerService)
       .useValue(structuredLogger)
       .compile();
@@ -129,6 +136,7 @@ describe('AppController (e2e)', () => {
         route: '/health',
       },
     );
+
     const completionContext = structuredLogger.info.mock.calls[1]?.[1];
 
     expect(structuredLogger.info.mock.calls[1]?.[0]).toBe('request_completed');
@@ -148,11 +156,13 @@ describe('AppController (e2e)', () => {
 
   it('returns a standardized custom error code', async () => {
     const requestId = 'custom-error-request';
+
     const response = await request(app.getHttpServer())
       .get('/__test/errors/custom')
       .set('x-request-id', requestId)
       .expect(400)
       .expect('x-request-id', requestId);
+
     const { timestamp, ...body } = readResponseBody(response);
 
     expect(body).toEqual({
@@ -162,15 +172,18 @@ describe('AppController (e2e)', () => {
       requestId,
       path: '/__test/errors/custom',
     });
+
     expectValidTimestamp(timestamp);
   });
 
   it('derives a standardized error code from the HTTP status', async () => {
     const requestId = 'not-found-request';
+
     const response = await request(app.getHttpServer())
       .get('/__test/errors/not-found')
       .set('x-request-id', requestId)
       .expect(404);
+
     const { timestamp, ...body } = readResponseBody(response);
 
     expect(body).toEqual({
@@ -180,15 +193,18 @@ describe('AppController (e2e)', () => {
       requestId,
       path: '/__test/errors/not-found',
     });
+
     expectValidTimestamp(timestamp);
   });
 
   it('does not expose unexpected internal error details', async () => {
     const requestId = 'internal-error-request';
+
     const response = await request(app.getHttpServer())
       .get('/__test/errors/unexpected')
       .set('x-request-id', requestId)
       .expect(500);
+
     const { timestamp, ...body } = readResponseBody(response);
 
     expect(body).toEqual({
@@ -198,7 +214,9 @@ describe('AppController (e2e)', () => {
       requestId,
       path: '/__test/errors/unexpected',
     });
+
     expectValidTimestamp(timestamp);
+
     expect(JSON.stringify(structuredLogger.error.mock.calls)).not.toContain(
       'super-secret',
     );
@@ -206,10 +224,12 @@ describe('AppController (e2e)', () => {
 
   it('traces unmatched routes without logging query secrets', async () => {
     const requestId = 'missing-route-request';
+
     const response = await request(app.getHttpServer())
       .get('/missing-resource?token=must-not-be-logged')
       .set('x-request-id', requestId)
       .expect(404);
+
     const { timestamp, ...body } = readResponseBody(response);
     const failureContext = structuredLogger.error.mock.calls[0]?.[1];
 
@@ -220,15 +240,20 @@ describe('AppController (e2e)', () => {
       requestId,
       path: '/missing-resource',
     });
+
     expectValidTimestamp(timestamp);
+
     expect(structuredLogger.error.mock.calls[0]?.[0]).toBe('request_failed');
+
     expect(failureContext).toMatchObject({
       requestId,
       method: 'GET',
       route: '/missing-resource',
       statusCode: 404,
     });
+
     expect(typeof failureContext?.durationMs).toBe('number');
+
     expect(JSON.stringify(structuredLogger.error.mock.calls)).not.toContain(
       'must-not-be-logged',
     );
@@ -269,6 +294,7 @@ describe('AppController (e2e)', () => {
     for (const sensitiveValue of sensitiveValues) {
       expect(serializedLogs).not.toContain(sensitiveValue);
     }
+
     expect(structuredLogger.info).toHaveBeenCalledTimes(2);
     expect(structuredLogger.error).not.toHaveBeenCalled();
   });

@@ -18,9 +18,9 @@ O modelo atual permite atuação fullstack. Não atribuir à equipe pessoas ou c
 ## Stack e estrutura
 
 - `apps/web`: Next.js 16, React 19, TypeScript, Tailwind CSS 4, App Router e Embla Carousel;
-- `apps/api`: NestJS 11 e TypeScript, com base e health check;
-- MySQL: banco definido;
-- Prisma ORM: ORM definido para a fase de dados, ainda sem dependência, schema ou migrations no repositório.
+- `apps/api`: NestJS 11, TypeScript e Prisma ORM, com base e health check;
+- PostgreSQL: banco definido para homologação;
+- Prisma ORM: camada integrada à API, ainda sem modelos de domínio ou migrations.
 
 Componentes atuais da landing incluem `Header`, `HeroSection`, `AboutSection`, `NewsSection`, `EventCarousel`, `TablesSection`, `TableCard`, `TeamSection`, `Footer`, `SectionHeader` e `HorizontalCarousel`.
 
@@ -60,9 +60,9 @@ Tipos de commit: `feat`, `fix`, `docs`, `chore`, `style`, `refactor` e `test`.
 
 ## Back-end e banco
 
-A API atual só possui a base NestJS e as rotas `/` e `/health`. Não documentar ou tratar login, JWT, usuários, mesas, pagamentos ou Prisma como implementados.
+A API atual possui a base NestJS, as rotas `/` e `/health` e a infraestrutura Prisma. Não documentar ou tratar login, JWT, usuários, mesas, pagamentos ou modelos de domínio como implementados.
 
-MySQL e Prisma ORM são decisões arquiteturais para a fase de backend/database. Quando a implementação começar, schema e migrations deverão ser versionados; não executar comandos Prisma antes de as dependências e configuração existirem.
+PostgreSQL e Prisma ORM são as decisões atuais para homologação. Schema e migrations deverão ser versionados quando os primeiros modelos de domínio forem definidos. Em desenvolvimento, use `prisma migrate dev`; em homologação e produção, aplique somente migrations versionadas com `prisma migrate deploy`. Não use `prisma db push` em produção. Para preservar a portabilidade futura para MySQL, evite tipos nativos, extensões e SQL específicos do PostgreSQL sem decisão arquitetural documentada.
 
 ## Variáveis de ambiente
 
