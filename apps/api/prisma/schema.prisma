@@ -1,5 +1,19 @@
-// O schema deve permanecer portavel: evite tipos nativos, extensoes e SQL
-// especificos do PostgreSQL sem uma decisao arquitetural documentada.
+// O schema deve permanecer portável entre PostgreSQL e MySQL.
+//
+// Regras arquiteturais:
+// - Prisma é a camada padrão de acesso a dados.
+// - Evitar SQL raw.
+// - Evitar tipos nativos @db.* sem necessidade comprovada.
+// - Evitar arrays específicos de provider.
+// - Evitar extensões, triggers, procedures e recursos exclusivos do PostgreSQL.
+// - Regras de negócio permanecem na camada NestJS.
+// - IDs utilizam cuid() para não depender de funções específicas do banco.
+// - Migrations PostgreSQL não são consideradas automaticamente reutilizáveis no MySQL.
+//
+// Algumas regras condicionais não são representadas por constraints SQL
+// específicas para preservar portabilidade. Elas devem ser validadas
+// pela camada de aplicação.
+
 generator client {
   provider     = "prisma-client"
   output       = "../src/generated/prisma"
@@ -8,4 +22,879 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+// -----------------------------------------------------------------------------
+// Autenticação e papéis
+// -----------------------------------------------------------------------------
+
+enum SystemRole {
+  USER
+  ADMIN
+  DEV
+}
+
+enum ClubRole {
+  PLAYER
+  MASTER
+  ADMIN
+}
+
+enum AccountStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+  DELETION_PENDING
+  ANONYMIZED
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// -----------------------------------------------------------------------------
+// Mesas
+// -----------------------------------------------------------------------------
+
+enum CampaignStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum OneShotStatus {
+  DRAFT
+  SCHEDULED
+  CANCELLED
+  COMPLETED
+}
+
+enum SessionStatus {
+  SCHEDULED
+  CANCELLED
+  COMPLETED
+}
+
+enum SessionParticipantRole {
+  PLAYER
+  MASTER
+}
+
+enum SessionParticipantStatus {
+  REGISTERED
+  CONFIRMED
+  ATTENDED
+  CANCELLED
+  NO_SHOW
+}
+
+// -----------------------------------------------------------------------------
+// Feedbacks
+// -----------------------------------------------------------------------------
+
+enum FeedbackTargetType {
+  SESSION
+  MASTER
+  PLAYER
+}
+
+enum FeedbackVisibility {
+  PUBLIC
+  PRIVATE_TO_RECIPIENT
+}
+
+// -----------------------------------------------------------------------------
+// Reports e disciplina
+// -----------------------------------------------------------------------------
+
+enum ReportTargetType {
+  USER
+  SESSION
+}
+
+enum ReportStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED
+  DISMISSED
+}
+
+enum WarningSeverity {
+  LIGHT
+  MODERATE
+  SEVERE
+}
+
+enum WarningStatus {
+  ACTIVE
+  EXPIRED
+  REVERSED
+}
+
+enum SanctionType {
+  TABLE_CREATION_RESTRICTION
+  TABLE_PARTICIPATION_RESTRICTION
+  EVENT_PARTICIPATION_RESTRICTION
+  CLUB_ACTIVITY_RESTRICTION
+  MASTER_ACTIVITY_RESTRICTION
+  ACCOUNT_SUSPENSION
+  EXPULSION
+}
+
+enum SanctionScopeType {
+  GENERAL
+  CAMPAIGN
+  SESSION
+  OTHER
+}
+
+enum SanctionStatus {
+  ACTIVE
+  EXPIRED
+  REVERSED
+}
+
+enum AppealStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// -----------------------------------------------------------------------------
+// Sistemas de RPG
+// -----------------------------------------------------------------------------
+
+model GameSystem {
+  id   String @id @default(cuid())
+  code String @unique
+  name String
+
+  active Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  campaigns Campaign[]
+  oneShots  OneShot[]
+
+  @@index([active])
+}
+
+// -----------------------------------------------------------------------------
+// Usuários
+// -----------------------------------------------------------------------------
+
+model User {
+  id String @id @default(cuid())
+
+  // Email é obrigatório para qualquer conta utilizável.
+  //
+  // Permanece nullable no schema apenas para permitir remoção do dado
+  // pessoal durante a anonimização definitiva.
+  //
+  // A aplicação deve:
+  // - exigir email em contas não ANONYMIZED;
+  // - validar o formato;
+  // - trim;
+  // - converter para lowercase antes de salvar.
+  email String? @unique
+
+  // Nunca armazenar senha em texto.
+  //
+  // Nullable apenas para permitir remoção da credencial
+  // durante a anonimização.
+  passwordHash String?
+
+  status     AccountStatus @default(PENDING)
+  systemRole SystemRole    @default(USER)
+
+  // Aprovação ou rejeição inicial do cadastro.
+  reviewedById String?
+  reviewedAt   DateTime?
+  reviewNote   String?
+
+  // Estado administrativo atual de suspensão.
+  // Alterações históricas completas devem permanecer no AuditLog.
+  suspendedById    String?
+  suspendedAt      DateTime?
+  suspensionReason String?
+
+  // Exclusão recuperável por 90 dias e anonimização posterior.
+  deletionRequestedAt DateTime?
+  deletionExpiresAt   DateTime?
+  anonymizedAt        DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  profile Profile?
+
+  clubRoles      UserClubRole[] @relation("UserClubRoles")
+  clubRoleGrants UserClubRole[] @relation("ClubRoleGrantedBy")
+
+  reviewedBy    User?  @relation("UserReview", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedUsers User[] @relation("UserReview")
+
+  suspendedBy    User?  @relation("UserSuspension", fields: [suspendedById], references: [id], onDelete: SetNull)
+  suspendedUsers User[] @relation("UserSuspension")
+
+  campaignsMastered Campaign[] @relation("CampaignMaster")
+  campaignsReviewed Campaign[] @relation("CampaignReviewer")
+
+  oneShotsMastered OneShot[] @relation("OneShotMaster")
+  oneShotsReviewed OneShot[] @relation("OneShotReviewer")
+
+  sessionParticipations SessionParticipant[] @relation("SessionParticipantUser")
+
+  feedbacksAuthored Feedback[] @relation("FeedbackAuthor")
+  feedbacksReceived Feedback[] @relation("FeedbackTargetUser")
+  feedbacksHidden   Feedback[] @relation("FeedbackHiddenBy")
+
+  reportsAuthored  Report[] @relation("ReportAuthor")
+  reportsReceived  Report[] @relation("ReportTargetUser")
+  reportsReviewed  Report[] @relation("ReportReviewer")
+  reportsDisclosed Report[] @relation("ReportDiscloser")
+
+  warningsReceived Warning[] @relation("WarningUser")
+  warningsCreated  Warning[] @relation("WarningCreator")
+  warningsReversed Warning[] @relation("WarningReverser")
+
+  sanctionsReceived Sanction[] @relation("SanctionUser")
+  sanctionsCreated  Sanction[] @relation("SanctionCreator")
+  sanctionsReversed Sanction[] @relation("SanctionReverser")
+
+  appealsSubmitted Appeal[] @relation("AppealUser")
+  appealsReviewed  Appeal[] @relation("AppealReviewer")
+
+  auditLogs AuditLog[] @relation("AuditLogActor")
+
+  @@index([status, createdAt])
+  @@index([systemRole])
+  @@index([reviewedById])
+  @@index([suspendedById])
+  @@index([deletionExpiresAt])
+}
+
+// -----------------------------------------------------------------------------
+// Perfil
+// -----------------------------------------------------------------------------
+
+model Profile {
+  id     String @id @default(cuid())
+  userId String @unique
+
+  // Nome pelo qual o membro é identificado na comunidade.
+  //
+  // Não exige nome civil/legal.
+  // Obrigatório na aplicação enquanto a conta não estiver ANONYMIZED.
+  displayName String?
+
+  // Número utilizado para identificar o membro na comunidade do WhatsApp.
+  //
+  // Obrigatório na aplicação enquanto a conta não estiver ANONYMIZED.
+  // Deve ser normalizado para E.164 antes da persistência.
+  //
+  // Exemplo:
+  // +5579999999999
+  //
+  // A unicidade representa a regra de uma conta por número.
+  whatsappNumber String? @unique
+
+  // Obrigatória para contas normais.
+  //
+  // A aplicação deve tratar como date-only e normalizar o valor
+  // para 00:00:00 UTC antes de persistir.
+  //
+  // Menores de 18 anos não entram nesta versão autenticada.
+  //
+  // Nullable no schema apenas para permitir anonimização.
+  birthDate DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// -----------------------------------------------------------------------------
+// Papéis acumuláveis do clube
+// -----------------------------------------------------------------------------
+
+model UserClubRole {
+  id     String   @id @default(cuid())
+  userId String
+  role   ClubRole
+
+  grantedById String?
+  grantedAt   DateTime @default(now())
+
+  user      User  @relation("UserClubRoles", fields: [userId], references: [id], onDelete: Cascade)
+  grantedBy User? @relation("ClubRoleGrantedBy", fields: [grantedById], references: [id], onDelete: SetNull)
+
+  @@unique([userId, role])
+  @@index([role])
+  @@index([grantedById])
+}
+
+// -----------------------------------------------------------------------------
+// Campanhas
+// -----------------------------------------------------------------------------
+
+model Campaign {
+  id String @id @default(cuid())
+
+  masterId     String
+  gameSystemId String
+
+  title       String
+  description String?
+
+  status         CampaignStatus @default(DRAFT)
+  approvalStatus ApprovalStatus @default(PENDING)
+
+  reviewedById String?
+  reviewedAt   DateTime?
+  reviewNote   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  master     User       @relation("CampaignMaster", fields: [masterId], references: [id])
+  reviewedBy User?      @relation("CampaignReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  gameSystem GameSystem @relation(fields: [gameSystemId], references: [id])
+
+  sessions Session[]
+
+  sanctionScopes Sanction[] @relation("SanctionCampaignScope")
+
+  @@index([masterId, status])
+  @@index([gameSystemId])
+  @@index([approvalStatus, createdAt])
+  @@index([reviewedById])
+  @@index([createdAt])
+}
+
+// -----------------------------------------------------------------------------
+// One-shots
+// -----------------------------------------------------------------------------
+
+model OneShot {
+  id String @id @default(cuid())
+
+  masterId     String
+  gameSystemId String
+
+  title       String
+  description String?
+
+  status         OneShotStatus  @default(DRAFT)
+  approvalStatus ApprovalStatus @default(PENDING)
+
+  reviewedById String?
+  reviewedAt   DateTime?
+  reviewNote   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  master     User       @relation("OneShotMaster", fields: [masterId], references: [id])
+  reviewedBy User?      @relation("OneShotReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  gameSystem GameSystem @relation(fields: [gameSystemId], references: [id])
+
+  // Cada one-shot possui exatamente uma sessão no domínio.
+  //
+  // A unicidade é garantida pelo oneShotId @unique em Session.
+  // O service deve criar OneShot + Session em uma transaction.
+  session Session?
+
+  @@index([masterId, status])
+  @@index([gameSystemId])
+  @@index([approvalStatus, createdAt])
+  @@index([reviewedById])
+  @@index([createdAt])
+}
+
+// -----------------------------------------------------------------------------
+// Sessões
+// -----------------------------------------------------------------------------
+
+model Session {
+  id String @id @default(cuid())
+
+  // Uma sessão pertence a uma Campaign OU a uma OneShot.
+  //
+  // A aplicação deve garantir XOR:
+  // campaignId preenchido e oneShotId null;
+  // OU oneShotId preenchido e campaignId null.
+  campaignId String?
+  oneShotId  String? @unique
+
+  title       String?
+  scheduledAt DateTime
+
+  status SessionStatus @default(SCHEDULED)
+
+  cancelledAt        DateTime?
+  cancellationReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  campaign Campaign? @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  oneShot  OneShot?  @relation(fields: [oneShotId], references: [id], onDelete: Restrict)
+
+  participants SessionParticipant[]
+  feedbacks    Feedback[]
+  reports      Report[]
+
+  sanctionScopes Sanction[] @relation("SanctionSessionScope")
+
+  @@index([campaignId])
+  @@index([status, scheduledAt])
+  @@index([scheduledAt])
+}
+
+// -----------------------------------------------------------------------------
+// Participação em sessões
+// -----------------------------------------------------------------------------
+
+model SessionParticipant {
+  id String @id @default(cuid())
+
+  sessionId String
+  userId    String
+
+  role   SessionParticipantRole
+  status SessionParticipantStatus @default(REGISTERED)
+
+  registeredAt DateTime  @default(now())
+  confirmedAt  DateTime?
+  attendedAt   DateTime?
+
+  // Informações de cancelamento da participação.
+  cancelledAt        DateTime?
+  cancellationReason String?
+
+  // Permite registrar saída quando necessário.
+  leftAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  session Session @relation(fields: [sessionId], references: [id])
+  user    User    @relation("SessionParticipantUser", fields: [userId], references: [id])
+
+  @@unique([sessionId, userId])
+  @@index([userId, status])
+  @@index([sessionId, status])
+  @@index([sessionId, role])
+}
+
+// -----------------------------------------------------------------------------
+// Feedbacks
+// -----------------------------------------------------------------------------
+
+model Feedback {
+  id String @id @default(cuid())
+
+  authorId  String
+  sessionId String
+
+  targetType   FeedbackTargetType
+  targetUserId String?
+
+  // A aplicação valida:
+  // rating >= 0
+  // rating <= 10
+  rating Int
+
+  comment String?
+
+  visibility FeedbackVisibility @default(PUBLIC)
+
+  // Deve ser createdAt + 24 horas.
+  editableUntil DateTime
+
+  // Moderação preserva histórico em vez de apagar.
+  hiddenAt         DateTime?
+  hiddenById       String?
+  moderationReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  author     User    @relation("FeedbackAuthor", fields: [authorId], references: [id])
+  targetUser User?   @relation("FeedbackTargetUser", fields: [targetUserId], references: [id], onDelete: Restrict)
+  hiddenBy   User?   @relation("FeedbackHiddenBy", fields: [hiddenById], references: [id], onDelete: SetNull)
+  session    Session @relation(fields: [sessionId], references: [id])
+
+  // Regras da aplicação:
+  //
+  // MASTER ou PLAYER:
+  // - targetUserId obrigatório;
+  // - destinatário deve possuir relação válida com a sessão.
+  //
+  // SESSION:
+  // - targetUserId deve ser null;
+  // - PRIVATE_TO_RECIPIENT não é permitido.
+  //
+  // O autor também deve possuir participação válida na sessão.
+
+  @@index([authorId, sessionId])
+  @@index([targetUserId])
+  @@index([sessionId, targetType])
+  @@index([hiddenById])
+  @@index([createdAt])
+}
+
+// -----------------------------------------------------------------------------
+// Categorias disciplinares
+// -----------------------------------------------------------------------------
+
+model DisciplinaryCategory {
+  id String @id @default(cuid())
+
+  // Identificador estável usado pela aplicação.
+  code String @unique
+
+  label String
+
+  // OTHER pode ter defaultSeverity null e depender
+  // de classificação administrativa.
+  defaultSeverity WarningSeverity?
+
+  active Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  reports  Report[]
+  warnings Warning[]
+
+  @@index([active])
+}
+
+// -----------------------------------------------------------------------------
+// Reports
+// -----------------------------------------------------------------------------
+
+model Report {
+  id String @id @default(cuid())
+
+  authorId  String
+  sessionId String
+
+  targetType ReportTargetType
+
+  // Obrigatório na aplicação quando targetType = USER.
+  // Deve ser null quando targetType = SESSION.
+  reportedUserId String?
+
+  categoryId String
+
+  description String
+
+  status ReportStatus @default(OPEN)
+
+  reviewedById   String?
+  reviewedAt     DateTime?
+  resolutionNote String?
+
+  // O reportado não conhece automaticamente autor/conteúdo.
+  // Caso um ADMIN decida revelar o conteúdo ao reportado,
+  // registramos quem autorizou e quando.
+  disclosedById String?
+  disclosedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  author       User  @relation("ReportAuthor", fields: [authorId], references: [id])
+  reportedUser User? @relation("ReportTargetUser", fields: [reportedUserId], references: [id], onDelete: Restrict)
+  reviewedBy   User? @relation("ReportReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  disclosedBy  User? @relation("ReportDiscloser", fields: [disclosedById], references: [id], onDelete: SetNull)
+
+  session  Session              @relation(fields: [sessionId], references: [id])
+  category DisciplinaryCategory @relation(fields: [categoryId], references: [id])
+
+  evidences ReportEvidence[]
+  warnings  Warning[]
+  sanctions Sanction[]
+
+  // A aplicação deve garantir:
+  // - autor relacionado à sessão;
+  // - USER exige reportedUserId;
+  // - SESSION exige reportedUserId null;
+  // - jogador pode reportar jogador, mestre ou sessão;
+  // - mestre pode reportar jogador;
+  // - report nunca gera warning/sanction automaticamente.
+
+  @@index([status, createdAt])
+  @@index([sessionId, status])
+  @@index([authorId])
+  @@index([reportedUserId])
+  @@index([categoryId])
+  @@index([reviewedById])
+  @@index([disclosedById])
+  @@index([createdAt])
+}
+
+// -----------------------------------------------------------------------------
+// Evidências de reports
+// -----------------------------------------------------------------------------
+
+model ReportEvidence {
+  id String @id @default(cuid())
+
+  reportId String
+
+  url   String
+  label String?
+
+  createdAt DateTime @default(now())
+
+  report Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([reportId])
+}
+
+// -----------------------------------------------------------------------------
+// Advertências
+// -----------------------------------------------------------------------------
+
+model Warning {
+  id String @id @default(cuid())
+
+  userId String
+
+  // Pode nascer de report ou ser criada diretamente por ADMIN.
+  reportId String?
+
+  categoryId String
+
+  severity WarningSeverity
+
+  // Componentes do cálculo são preservados para manter o histórico
+  // mesmo que as regras sejam alteradas no futuro.
+  //
+  // LIGHT    -> peso base 1
+  // MODERATE -> peso base 3
+  // SEVERE   -> peso base 6
+  //
+  // Recorrência:
+  // 1ª -> x1.0
+  // 2ª -> x1.5
+  // 3ª -> x2.0
+  // 4ª+ -> x2.5
+  baseWeight           Decimal
+  recurrenceMultiplier Decimal
+  effectiveWeight      Decimal
+  occurrenceNumber     Int
+
+  status WarningStatus @default(ACTIVE)
+
+  reason String
+
+  expiresAt DateTime
+
+  createdById String
+
+  reversedById   String?
+  reversedAt     DateTime?
+  reversalReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user       User  @relation("WarningUser", fields: [userId], references: [id])
+  createdBy  User  @relation("WarningCreator", fields: [createdById], references: [id])
+  reversedBy User? @relation("WarningReverser", fields: [reversedById], references: [id], onDelete: SetNull)
+
+  report   Report?              @relation(fields: [reportId], references: [id], onDelete: Restrict)
+  category DisciplinaryCategory @relation(fields: [categoryId], references: [id])
+
+  sanctions Sanction[]
+  appeals   Appeal[]
+
+  // A aplicação deve garantir:
+  // - occurrenceNumber >= 1;
+  // - effectiveWeight = baseWeight * recurrenceMultiplier;
+  // - recorrência considera apenas warnings ACTIVE da mesma categoria;
+  // - warning direta exige justificativa administrativa;
+  // - expiração remove peso ativo, mas preserva histórico;
+  // - pontuação nunca gera sanção automaticamente.
+
+  @@index([userId, status])
+  @@index([userId, categoryId, status])
+  @@index([status, expiresAt])
+  @@index([reportId])
+  @@index([createdById])
+  @@index([reversedById])
+}
+
+// -----------------------------------------------------------------------------
+// Sanções
+// -----------------------------------------------------------------------------
+
+model Sanction {
+  id String @id @default(cuid())
+
+  userId String
+
+  // Pode estar associada a report, warning, aos dois
+  // ou ser decisão administrativa independente.
+  reportId  String?
+  warningId String?
+
+  type   SanctionType
+  status SanctionStatus @default(ACTIVE)
+
+  scopeType SanctionScopeType @default(GENERAL)
+
+  campaignId String?
+  sessionId  String?
+
+  // Utilizado para escopos ainda não representados por uma entidade,
+  // como atividade/evento específico do clube.
+  scopeDescription String?
+
+  reason String
+
+  startsAt DateTime  @default(now())
+  endsAt   DateTime?
+
+  createdById String
+
+  reversedById   String?
+  reversedAt     DateTime?
+  reversalReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user       User  @relation("SanctionUser", fields: [userId], references: [id])
+  createdBy  User  @relation("SanctionCreator", fields: [createdById], references: [id])
+  reversedBy User? @relation("SanctionReverser", fields: [reversedById], references: [id], onDelete: SetNull)
+
+  report  Report?  @relation(fields: [reportId], references: [id], onDelete: Restrict)
+  warning Warning? @relation(fields: [warningId], references: [id], onDelete: Restrict)
+
+  campaign Campaign? @relation("SanctionCampaignScope", fields: [campaignId], references: [id], onDelete: Restrict)
+  session  Session?  @relation("SanctionSessionScope", fields: [sessionId], references: [id], onDelete: Restrict)
+
+  appeals Appeal[]
+
+  // Regras da aplicação:
+  //
+  // GENERAL:
+  // campaignId = null
+  // sessionId = null
+  //
+  // CAMPAIGN:
+  // campaignId obrigatório
+  // sessionId null
+  //
+  // SESSION:
+  // sessionId obrigatório
+  // campaignId null
+  //
+  // OTHER:
+  // scopeDescription obrigatório
+  //
+  // EXPULSION é sanção, não AccountStatus.
+  // Nenhuma sanção é aplicada automaticamente por pontuação.
+
+  @@index([userId, status])
+  @@index([status, endsAt])
+  @@index([reportId])
+  @@index([warningId])
+  @@index([campaignId])
+  @@index([sessionId])
+  @@index([createdById])
+  @@index([reversedById])
+}
+
+// -----------------------------------------------------------------------------
+// Recursos
+// -----------------------------------------------------------------------------
+
+model Appeal {
+  id String @id @default(cuid())
+
+  userId String
+
+  // A aplicação deve garantir XOR:
+  // warningId OU sanctionId.
+  warningId  String?
+  sanctionId String?
+
+  // Deve variar entre 1 e 3 para o mesmo caso.
+  sequence Int
+
+  justification String
+
+  status AppealStatus @default(PENDING)
+
+  reviewedById String?
+  reviewedAt   DateTime?
+  response     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user       User  @relation("AppealUser", fields: [userId], references: [id])
+  reviewedBy User? @relation("AppealReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  warning  Warning?  @relation(fields: [warningId], references: [id], onDelete: Restrict)
+  sanction Sanction? @relation(fields: [sanctionId], references: [id], onDelete: Restrict)
+
+  @@unique([warningId, sequence])
+  @@unique([sanctionId, sequence])
+  @@index([userId])
+  @@index([status, createdAt])
+  @@index([reviewedById])
+}
+
+// -----------------------------------------------------------------------------
+// Auditoria
+// -----------------------------------------------------------------------------
+
+model AuditLog {
+  id String @id @default(cuid())
+
+  // Pode ser null para ações internas/automatizadas.
+  actorId String?
+
+  // Strings são intencionais para permitir novos tipos de
+  // eventos sem exigir migration a cada ação administrativa.
+  action     String
+  entityType String
+  entityId   String
+
+  // Permite correlacionar audit log e observabilidade HTTP.
+  requestId String?
+
+  // Deve conter apenas metadados mínimos necessários.
+  //
+  // Nunca armazenar aqui:
+  // - senha;
+  // - JWT;
+  // - Authorization;
+  // - cookies;
+  // - conteúdo integral de report;
+  // - evidências sensíveis sem necessidade.
+  metadata Json?
+
+  createdAt DateTime @default(now())
+
+  actor User? @relation("AuditLogActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([actorId, createdAt])
+  @@index([entityType, entityId])
+  @@index([requestId])
+  @@index([createdAt])
 }
