@@ -93,6 +93,54 @@ describe('AppController (e2e)', () => {
       .expect('Hello World!');
   });
 
+  it('requires a user context on private table routes', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/tables/me')
+      .expect(401);
+
+    expect(readResponseBody(response)).toMatchObject({
+      statusCode: 401,
+      code: 'USER_CONTEXT_REQUIRED',
+    });
+  });
+
+  it('validates campaign input before reaching the domain service', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/campaigns')
+      .set('x-user-id', 'master-1')
+      .send({ title: 'Campanha sem sistema' })
+      .expect(400);
+
+    expect(readResponseBody(response)).toMatchObject({
+      statusCode: 400,
+      code: 'BAD_REQUEST',
+    });
+  });
+
+  it('validates the mandatory session of a one-shot', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/one-shots')
+      .set('x-user-id', 'master-1')
+      .send({ gameSystemId: 'system-1', title: 'One-shot incompleto' })
+      .expect(400);
+
+    expect(readResponseBody(response)).toMatchObject({
+      statusCode: 400,
+      code: 'BAD_REQUEST',
+    });
+  });
+
+  it('rejects invalid public pagination parameters', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/campaigns/public?page=0&limit=100')
+      .expect(400);
+
+    expect(readResponseBody(response)).toMatchObject({
+      statusCode: 400,
+      code: 'BAD_REQUEST',
+    });
+  });
+
   it('generates a request ID when the header is absent', () => {
     return request(app.getHttpServer())
       .get('/health')

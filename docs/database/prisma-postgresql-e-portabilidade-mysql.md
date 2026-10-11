@@ -24,8 +24,8 @@ O valor real de homologação deve ser solicitado ao Tech Lead. O exemplo usa `l
 | `prisma/schema.prisma`                   | Criado com provider PostgreSQL                       |
 | Integração com NestJS                    | `PrismaModule` e `PrismaService` implementados       |
 | Carregamento de `.env`                   | Configurado com `ConfigModule`                       |
-| Modelos de domínio                       | Aguardando definição                                 |
-| `prisma/migrations/`                     | Aguardando o primeiro modelo aprovado                |
+| Modelos de domínio                       | Schema inicial da Fase 2 versionado                  |
+| `prisma/migrations/`                     | Migration inicial criada, aplicada e validada        |
 | Conexão de homologação                   | Validada com o PostgreSQL de homologação no Supabase |
 
 A API abre a conexão no início da aplicação e a encerra durante o shutdown. Os testes e2e substituem o serviço de banco por um mock para continuarem determinísticos e independentes de infraestrutura externa.
@@ -45,7 +45,9 @@ O comando `prisma:migrate:dev` é exclusivo para desenvolvimento. O Prisma 7 nã
 
 Não use a credencial de homologação nesse fluxo. A geração e a validação do client não abrem conexão e também são executadas automaticamente antes de build, execução local e testes.
 
-O schema atual não contém modelos. Não foi criada uma migration vazia, pois ela não descreveria uma alteração real do domínio.
+O schema atual contém os modelos iniciais da Fase 2 e a migration correspondente.
+Novas alterações devem continuar sendo representadas por migrations revisáveis,
+sem substituir o histórico já aplicado.
 
 ## Fluxo de homologação e produção
 

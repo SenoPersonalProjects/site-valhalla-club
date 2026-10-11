@@ -19,12 +19,12 @@ A landing pública não depende da API em runtime.
 
 ## Stack
 
-| Área | Tecnologias e estado |
-| --- | --- |
+| Área      | Tecnologias e estado                                                          |
+| --------- | ----------------------------------------------------------------------------- |
 | Front-end | Next.js 16, React 19, TypeScript, Tailwind CSS 4, App Router e Embla Carousel |
-| Back-end | NestJS 11, TypeScript e Prisma ORM; base com rotas `/` e `/health` |
-| Banco | PostgreSQL em homologação; camada Prisma preparada para receber o schema de domínio, preservando portabilidade futura para MySQL |
-| Gestão | GitHub e ClickUp |
+| Back-end  | NestJS 11, TypeScript e Prisma ORM; campanhas, sessões e one-shots da Fase 2  |
+| Banco     | PostgreSQL em homologação, com schema e migration inicial da Fase 2           |
+| Gestão    | GitHub e ClickUp                                                              |
 
 ## Estrutura
 
@@ -51,6 +51,7 @@ No front-end, `SITE_URL` define canonical, Open Graph e JSON-LD. Em produção, 
 - [Design system](docs/design-system.md)
 - [Header e Hero](docs/header-hero-landing.md)
 - [Prisma ORM, PostgreSQL e portabilidade](docs/database/prisma-postgresql-e-portabilidade-mysql.md)
+- [Campanhas, sessões e one-shots](docs/api/tables-domain.md)
 - [Preparação de deploy no Netlify](docs/deploy-netlify.md)
 - [README do front-end](apps/web/README.md)
 - [README da API](apps/api/README.md)
