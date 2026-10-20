@@ -17,6 +17,22 @@ acessíveis normalmente. A landing pública do MVP não depende desta API em run
 
 Consulte a [documentação de campanhas, sessões e one-shots](../../docs/api/tables-domain.md).
 
+A arquitetura temporária de desenvolvimento/homologação usa frontend Vercel,
+API NestJS no Render Free e PostgreSQL hospedado no Supabase Free. Prisma 7 está
+integrado; a migration inicial da Fase 2 está aplicada em homologação. Logging
+estruturado JSON e Request ID também estão implementados. A landing do MVP já
+está publicada na Vercel.
+
+API e MySQL no Railway são produção planejada, dependente de homologação,
+métricas e ensaio de migração. Supabase Auth e demais serviços específicos não
+são fundação do domínio. Detalhes canônicos:
+[ambientes e secrets](../../docs/architecture/fase2-ambientes.md),
+[métricas, capacidade e logs seguros](../../docs/observability/metricas-capacidade-fase2.md)
+e [dados pessoais e acesso](../../docs/privacy/lgpd-fase2.md).
+
+Modelos de conta, perfil, participação, feedback, disciplina e audit log existem
+no schema; seus fluxos completos não estão implementados por esta documentação.
+
 ## Scripts
 
 ```bash
@@ -36,7 +52,14 @@ O script `npm run lint` usa `--fix`; execute-o somente quando alterações autom
 
 Use Node.js 24, versão registrada em `.nvmrc`. O Prisma também aceita Node `^20.19`, `^22.12` ou `>=24`.
 
-Copie `.env.example` para `.env`. Para desenvolvimento e migrations locais, use um banco local ou isolado. Solicite ao Tech Lead o valor real de `DATABASE_URL` somente para homologação; nunca versione essa credencial. As demais variáveis presentes são `PORT`, `NODE_ENV`, `JWT_SECRET`, `JWT_EXPIRES_IN`, `FRONTEND_URL` e `CORS_ORIGIN`.
+Copie `.env.example` para `.env`, apenas localmente. Para desenvolvimento e
+migrations locais, use um banco local ou isolado. Solicite acesso à conexão de
+homologação por canal privado autorizado; nunca registre credenciais em PR,
+ClickUp, documentação ou logs. As variáveis presentes são `DATABASE_URL`, `PORT`,
+`NODE_ENV`, `JWT_SECRET`, `JWT_EXPIRES_IN`, `FRONTEND_URL` e `CORS_ORIGIN`.
+JWT e integração/CORS ainda são configurações reservadas, não recursos prontos.
+Render administra os secrets de homologação; Railway deverá administrar os da
+futura produção. Rotação por configuração, sem alteração de código.
 
 `DATABASE_URL` é carregada pelo `ConfigModule` e usada pelo `PrismaService`. A API tenta conectar ao PostgreSQL ao iniciar e encerra o pool junto com a aplicação. Consulte o [setup local](../../docs/setup-local.md) e a [documentação do Prisma e PostgreSQL](../../docs/database/prisma-postgresql-e-portabilidade-mysql.md).
 

@@ -5,7 +5,11 @@
 - Node.js 24 e npm (a API também aceita `^20.19`, `^22.12` ou `>=24`);
 - Git;
 - acesso ao repositório privado no GitHub;
-- PostgreSQL quando for executar a API com acesso ao banco.
+- PostgreSQL local ou isolado quando for executar a API com acesso ao banco.
+
+MVP publicado na [Vercel](https://clubevalhalla.vercel.app/). Homologação da Fase 2
+usa Vercel / Render Free / Supabase Free (PostgreSQL); Railway/MySQL é planejamento.
+Ver [arquitetura e ambientes](architecture/fase2-ambientes.md).
 
 ## Clone
 
@@ -18,16 +22,17 @@ cd site-valhalla-club
 
 ```bash
 cd apps/web
-npm install
+npm ci
 ```
 
-Crie `.env.local` a partir de `.env.example` e ajuste as variáveis existentes:
+Crie `.env.local` a partir de `.env.example` e ajuste as variáveis existentes.
+Somente nomes, sem credenciais:
 
-```env
-SITE_URL=http://localhost:3000
-NEXT_PUBLIC_API_URL=http://localhost:3001
-NEXT_PUBLIC_APP_NAME=Site Valhalla Club
-NEXT_PUBLIC_APP_ENV=development
+```text
+SITE_URL
+NEXT_PUBLIC_API_URL
+NEXT_PUBLIC_APP_NAME
+NEXT_PUBLIC_APP_ENV
 ```
 
 Execute:
@@ -44,19 +49,19 @@ O front-end local usa `http://localhost:3000`. No MVP público atual, `NEXT_PUBL
 
 ```bash
 cd apps/api
-npm install
+npm ci
 ```
 
 Crie `.env` a partir de `.env.example`. As variáveis documentadas atualmente são:
 
-```env
-PORT=3001
-NODE_ENV=development
-DATABASE_URL=postgresql://valhalla_app:change-me@localhost:5432/valhalla?schema=public
-JWT_SECRET=change-me
-JWT_EXPIRES_IN=1d
-FRONTEND_URL=http://localhost:3000
-CORS_ORIGIN=http://localhost:3000
+```text
+PORT
+NODE_ENV
+DATABASE_URL
+JWT_SECRET
+JWT_EXPIRES_IN
+FRONTEND_URL
+CORS_ORIGIN
 ```
 
 Execute:
@@ -68,13 +73,23 @@ npm run start:dev
 npm run build
 ```
 
-A API escuta `PORT` (ou 3000 se ela não for definida), expõe `/` e `/health` e conecta ao PostgreSQL ao iniciar. O valor do exemplo deve apontar para um banco local ou isolado para o desenvolvimento. Solicite ao Tech Lead a `DATABASE_URL` real somente quando precisar acessar homologação. JWT, CORS e integração com o front-end ainda não estão implementados.
+A API escuta `PORT` (ou 3000 se ela não for definida), expõe `/`, `/health` e
+rotas do [domínio de mesas](api/tables-domain.md), e conecta ao PostgreSQL ao
+iniciar. Use banco local ou isolado para desenvolvimento; solicite acesso à
+homologação por canal privado autorizado. Auth/JWT, CORS e integração da landing
+com a API ainda não estão implementados. Rotas privadas exigem contexto confiável
+`request.user.id` e falham fechadas com `401 USER_CONTEXT_REQUIRED` sem ele;
+`x-user-id` não autentica. Rotas públicas continuam acessíveis.
 
 ## PostgreSQL e Prisma ORM
 
-O Prisma está integrado à API e configurado para PostgreSQL. O schema ainda não possui modelos de domínio, por isso nenhuma migration vazia foi criada. Consulte [a documentação de banco](database/prisma-postgresql-e-portabilidade-mysql.md).
+Prisma 7 está integrado à API, configurado para PostgreSQL, com schema inicial
+da Fase 2 e migration inicial versionada e aplicada em homologação. Logging
+estruturado/Request ID e domínio base de Campaign, Session e OneShot estão
+implementados. Consulte [a documentação de banco](database/prisma-postgresql-e-portabilidade-mysql.md).
 
-Depois que o primeiro modelo for aprovado, o fluxo local, usando exclusivamente um banco de desenvolvimento, será:
+Para novas alterações de modelo aprovadas, o fluxo local usa exclusivamente
+um banco de desenvolvimento:
 
 ```bash
 npm run prisma:format
@@ -83,7 +98,9 @@ npm run prisma:migrate:dev -- --name nome_da_migration
 npm run prisma:generate
 ```
 
-Em homologação e produção, aplique apenas migrations já versionadas:
+Em homologação, aplique apenas migrations já versionadas e revisadas. A futura
+produção exige sua própria validação de provider e histórico MySQL; o SQL
+PostgreSQL não deve ser aplicado diretamente nela. Para o ambiente compatível:
 
 ```bash
 npm run prisma:migrate:status
@@ -97,3 +114,16 @@ Nunca execute `prisma:migrate:dev` com a URL de homologação. O ambiente ou job
 ## Testes da API
 
 Os scripts existentes incluem `npm run lint`, `npm run test`, `npm run test:e2e` e `npm run build`. O script de lint da API contém `--fix`; não o execute em uma auditoria ou revisão sem autorização para escrita.
+
+Os E2E atuais substituem Prisma por mock e não comprovam integração real com
+PostgreSQL ou MySQL. Para critérios de capacidade, consultar
+[métricas](observability/metricas-capacidade-fase2.md).
+
+## Segurança de configuração
+
+`.env` e `.env.local` são somente locais; exemplos versionados contêm apenas
+nomes/exemplos seguros. Nunca copiar secrets para PR, ClickUp, documentação ou
+logs. Variáveis `NEXT_PUBLIC_*` são públicas. Ambientes remotos administram
+secrets pela plataforma e permitem rotação sem alterar código; inventário e
+responsabilidades em [arquitetura](architecture/fase2-ambientes.md#secrets-e-variáveis-por-aplicação).
+Não usar dados reais pessoais em desenvolvimento; ver [privacidade](privacy/lgpd-fase2.md).

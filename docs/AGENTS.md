@@ -2,7 +2,9 @@
 
 ## Contexto e estado atual
 
-O Site Valhalla Club é o site institucional do clube de RPG de mesa de Aracaju, Sergipe. O MVP da landing está homologado e aguarda preparação de produção; não está publicado.
+O Site Valhalla Club é o site institucional do clube de RPG de mesa de Aracaju,
+Sergipe. O MVP está publicado na Vercel em https://clubevalhalla.vercel.app/.
+A Fase 2 está em desenvolvimento/homologação; Netlify é legado não operacional.
 
 O MVP implementa Header, Hero, Sobre, Eventos, Mesas rolando, Envolvidos e Contato/Footer, com conteúdo estático, responsividade, SEO básico e acessibilidade básica. A landing pública não depende do backend em runtime.
 
@@ -11,6 +13,7 @@ O MVP implementa Header, Hero, Sobre, Eventos, Mesas rolando, Envolvidos e Conta
 - Vinicius Ferreira — Tech Lead / FullStack;
 - Charles Matias de Oliveira — FullStack;
 - Gabriel Bomfim Bispo — FullStack;
+- Vitor Xavier — Design/Figma;
 - Dan — Stakeholder.
 
 O modelo atual permite atuação fullstack. Não atribuir à equipe pessoas ou cargos históricos que não estejam nesta lista.
@@ -18,9 +21,10 @@ O modelo atual permite atuação fullstack. Não atribuir à equipe pessoas ou c
 ## Stack e estrutura
 
 - `apps/web`: Next.js 16, React 19, TypeScript, Tailwind CSS 4, App Router e Embla Carousel;
-- `apps/api`: NestJS 11, TypeScript e Prisma ORM, com base e health check;
-- PostgreSQL: banco definido para homologação;
-- Prisma ORM: camada integrada à API, com schema e migration inicial da Fase 2.
+- `apps/api`: NestJS 11, TypeScript, Prisma 7, logging/Request ID e domínio base de mesas;
+- homologação: frontend Vercel, API Render Free e PostgreSQL hospedado no Supabase Free;
+- Prisma integrado, schema inicial da Fase 2 e migration inicial aplicada em homologação;
+- API/MySQL no Railway são produção planejada, condicionada a validação e métricas.
 
 Componentes atuais da landing incluem `Header`, `HeroSection`, `AboutSection`, `NewsSection`, `EventCarousel`, `TablesSection`, `TableCard`, `TeamSection`, `Footer`, `SectionHeader` e `HorizontalCarousel`.
 
@@ -76,12 +80,30 @@ homologação e produção, aplique somente migrations versionadas com
 portabilidade futura para MySQL, evite tipos nativos, extensões e SQL específicos
 do PostgreSQL sem decisão arquitetural documentada.
 
+Supabase é PostgreSQL hospedado: não adotar Auth como fundação da autenticação
+nem Realtime, Edge Functions, Storage ou RLS sem nova decisão. Regras de negócio
+pertencem à API NestJS. Distinguir modelo de schema, código implementado e
+funcionalidade homologada. Documentos canônicos:
+[arquitetura](architecture/fase2-ambientes.md),
+[métricas e logs seguros](observability/metricas-capacidade-fase2.md),
+[privacidade](privacy/lgpd-fase2.md) e [deploy Vercel](deploy-vercel.md).
+
 ## Variáveis de ambiente
 
 Nunca versionar `.env`, `.env.local` ou valores reais de credenciais. Versionar somente exemplos seguros.
+
+Nunca registrar secrets em PR, ClickUp, documentação ou logs. Vercel administra
+variáveis do frontend; Render as da API de homologação; Railway deverá administrar
+as de futura produção. Rotação deve ser possível por configuração, sem código.
 
 No front-end, `SITE_URL` deve receber a URL HTTPS pública real em produção para metadata, canonical, Open Graph e JSON-LD. A landing não precisa de API em runtime no MVP.
 
 ## Roadmap
 
-Próxima fase: autenticação, usuários, perfis de mestres, gerenciamento de mesas, participação de jogadores e calendário. Futuro: mesas pagas, pagamentos, integrações e ferramentas de RPG.
+Fase 2 atual: autenticação/cadastro/aprovação, papéis, perfil, campanhas, sessões,
+one-shots, participações, feedback, reports, advertências, sanções, recursos,
+administração, audit log e homologação. O domínio base de mesas existe; não
+documentar os demais fluxos como prontos por haver modelos no schema.
+
+Futuro: menores, marketplace de assets/homebrews, pagamentos, fórum, galeria,
+enquetes, Google Calendar e ferramentas avançadas de RPG. Ver [MVP e Fase 2](mvp.md).

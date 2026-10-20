@@ -9,7 +9,7 @@ Estas diretrizes consideram o uso de bancos diferentes ao longo do ciclo da apli
 ```text
 Desenvolvimento   → PostgreSQL / Supabase
 Homologação       → PostgreSQL / Supabase
-Produção          → MySQL / Railway
+Produção planejada → MySQL / Railway (não implantada)
 ```
 
 A adoção desse modelo exige cuidados para que desenvolvimento e homologação não passem a depender de comportamentos exclusivos do PostgreSQL que precisem ser redesenhados quando a aplicação chegar à produção.
@@ -46,16 +46,15 @@ Essa abordagem busca reduzir conflitos, retrabalho e risco técnico durante a pa
 
 As principais entidades persistentes devem utilizar identificadores portáveis, gerados pela aplicação ou pelo ORM sem depender de mecanismos específicos do PostgreSQL ou do MySQL.
 
-UUID é a estratégia inicialmente recomendada para as entidades do domínio. No domínio, o identificador deve ser tratado como `String`.
+O schema atual usa `String @id @default(cuid())`. Essa é a estratégia implementada
+e seus IDs devem ser preservados na migração. A discussão de UUID abaixo é uma
+alternativa conceitual histórica, não instrução para trocar IDs existentes.
+No domínio, o identificador é tratado como `String`.
 
-A versão concreta do UUID deverá ser definida durante a implementação do schema, considerando o suporte da versão efetivamente adotada do Prisma, a representação utilizada no PostgreSQL e no MySQL e os requisitos de desempenho.
-
-UUID v7 pode ser adotado caso o suporte da stack utilizada seja validado. Caso contrário, outra variante de UUID portável poderá ser utilizada sem alterar o princípio arquitetural desta diretriz.
-
-Exemplo conceitual, sujeito à validação da versão do Prisma:
+Exemplo do schema implementado:
 
 ```prisma
-id String @id @default(uuid())
+id String @id @default(cuid())
 ```
 
 A geração deve ocorrer preferencialmente na aplicação ou no ORM, sem depender de uma função exclusiva do PostgreSQL para produzir o identificador.
@@ -68,11 +67,13 @@ Como estratégia principal para entidades do domínio, recomenda-se evitar depen
 - `SERIAL`;
 - `AUTO_INCREMENT` como identidade lógica do domínio.
 
-O uso de UUID facilita a preservação dos identificadores entre providers, a manutenção de Foreign Keys e referências externas e reduz a necessidade de construir mapas de conversão de chaves durante uma migração.
+A preservação dos IDs textuais existentes entre providers mantém Foreign Keys
+e referências externas e evita mapas desnecessários de conversão de chaves.
 
 A representação textual é uma escolha voltada à portabilidade e não necessariamente a representação física mais compacta possível.
 
-O uso de UUID não representa autorização, segredo ou controle de acesso. Caso UUID v7 seja adotado, seu componente temporal também significa que o identificador não deve ser considerado completamente opaco quanto à ordem aproximada de criação.
+IDs não representam autorização, segredo ou controle de acesso. Qualquer futura
+mudança na estratégia exige decisão específica; esta consolidação não altera IDs.
 
 ## 3. Datas, horários e recorrência
 
@@ -476,7 +477,9 @@ Customizações manuais feitas em migrations PostgreSQL não serão reproduzidas
 - documentação;
 - teste.
 
-Durante o desenvolvimento, deve ser utilizado o mecanismo de criação e revisão de migrations apropriado à versão do Prisma adotada. `migrate dev`, caso ainda seja o comando aplicável nessa versão, pertence ao ambiente de desenvolvimento.
+Durante o desenvolvimento, o script `prisma:migrate:dev` pertence exclusivamente
+ao banco de desenvolvimento isolado. Scripts atuais e procedimentos ficam no
+[guia Prisma](prisma-postgresql-e-portabilidade-mysql.md).
 
 Homologação e produção devem aplicar migrations previamente versionadas por meio de um mecanismo não destrutivo de deploy. Quando a infraestrutura existir, recomenda-se que a aplicação das migrations de release faça parte do CI/CD.
 
@@ -486,7 +489,10 @@ Schema migration é diferente da migração de dados entre PostgreSQL e MySQL. T
 
 Embora os providers possam exigir históricos, configurações e adapters diferentes, recomenda-se evitar a manutenção manual de dois modelos de domínio independentes quando houver uma estratégia mais segura e com menor duplicação.
 
-A organização física de schemas, `prisma.config`, clients, diretórios e migrations deverá ser prototipada quando o Prisma for introduzido. Estas diretrizes não congelam uma estrutura de diretórios que ainda não foi validada.
+A organização PostgreSQL já existe em `apps/api/prisma` e `prisma.config.ts`;
+Prisma está integrado. A organização futura do histórico/client MySQL deverá
+ser prototipada em tarefa própria antes da migração, sem reescrever migrations
+PostgreSQL já aplicadas.
 
 ## 11. Configuração por ambiente
 
@@ -819,15 +825,22 @@ No estado atual do projeto:
 - o Supabase de homologação já foi provisionado com PostgreSQL;
 - a API de homologação já foi provisionada no Render;
 - a `DATABASE_URL` do ambiente de homologação já está configurada no Render;
-- Prisma ainda não está integrado à `develop`;
-- ainda não existe `schema.prisma` consolidado na `develop`;
-- ainda não existem migrations persistentes da Fase 2 na `develop`;
-- a conexão real da aplicação com o PostgreSQL via Prisma ainda precisa ser validada;
-- a API mantém sua base NestJS e as rotas `/` e `/health`;
+- Prisma 7 já está integrado à API;
+- o schema inicial da Fase 2 está versionado;
+- a migration inicial foi aplicada e a conexão validada em homologação,
+  conforme o [registro de integração](prisma-postgresql-e-portabilidade-mysql.md);
+- a API possui `/`, `/health`, logging estruturado/Request ID e domínio base
+  de Campaign, Session e OneShot;
 - a landing institucional continua sem depender da API em runtime.
 
-Autenticação, usuários persistentes, campanhas, sessões, one-shots, feedbacks, reports, advertências e sanções ainda serão implementados ao longo da Fase 2.
+Auth/JWT ainda não está implementada. Contas, perfil, participação, feedback,
+reports, advertências, sanções, recursos e audit log têm modelagem, mas seus
+fluxos de aplicação ainda precisam ser implementados/homologados. O domínio
+base de mesas já existe. Estado e fronteiras canônicos:
+[arquitetura da Fase 2](../architecture/fase2-ambientes.md).
 
 PostgreSQL/Supabase permanece como ambiente de desenvolvimento e homologação, enquanto MySQL/Railway continua sendo o destino planejado para produção, sujeito à prova de migração e à avaliação final de capacidade e custo.
 
-A aprovação destas diretrizes não significa que a camada de persistência já esteja implementada. Mudanças relevantes nesta estratégia devem ser registradas documentalmente e submetidas à revisão técnica.
+A persistência PostgreSQL está implementada; a migração MySQL não. Mudanças
+relevantes nesta estratégia devem ser registradas documentalmente e submetidas
+à revisão técnica.
