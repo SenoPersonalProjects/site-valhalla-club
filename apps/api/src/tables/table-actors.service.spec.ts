@@ -37,49 +37,55 @@ describe('TableActorsService', () => {
     userRepository.findUnique.mockResolvedValue({
       status: AccountStatus.APPROVED,
       systemRole: SystemRole.ADMIN,
-      clubRoles: [],
     });
 
     await expect(
       service.assertAdministrator('admin-1'),
     ).resolves.toBeUndefined();
+    expect(userRepository.findUnique).toHaveBeenCalledWith({
+      where: { id: 'admin-1' },
+      select: { status: true, systemRole: true },
+    });
   });
 
   it('accepts an approved developer', async () => {
     userRepository.findUnique.mockResolvedValue({
       status: AccountStatus.APPROVED,
       systemRole: SystemRole.DEV,
-      clubRoles: [],
     });
 
     await expect(service.assertAdministrator('dev-1')).resolves.toBeUndefined();
   });
 
-  it('accepts an approved club administrator', async () => {
+  it('rejects an approved system user with only the club administrator role', async () => {
     userRepository.findUnique.mockResolvedValue({
       status: AccountStatus.APPROVED,
       systemRole: SystemRole.USER,
       clubRoles: [{ id: 'role-1', role: ClubRole.ADMIN }],
     });
-    await expect(
-      service.assertAdministrator('admin-1'),
-    ).resolves.toBeUndefined();
-  });
-
-  it.each(
-    Object.values(AccountStatus).filter(
-      (status) => status !== AccountStatus.APPROVED,
-    ),
-  )('rejects a developer with account status %s', async (status) => {
-    userRepository.findUnique.mockResolvedValue({
-      status,
-      systemRole: SystemRole.DEV,
-      clubRoles: [],
-    });
-    await expect(service.assertAdministrator('dev-1')).rejects.toMatchObject({
+    await expect(service.assertAdministrator('admin-1')).rejects.toMatchObject({
       response: { code: 'ADMIN_ROLE_REQUIRED' },
     });
   });
+
+  it.each(
+    [SystemRole.ADMIN, SystemRole.DEV].flatMap((systemRole) =>
+      Object.values(AccountStatus)
+        .filter((status) => status !== AccountStatus.APPROVED)
+        .map((status) => ({ systemRole, status })),
+    ),
+  )(
+    'rejects $systemRole with account status $status',
+    async ({ systemRole, status }) => {
+      userRepository.findUnique.mockResolvedValue({
+        status,
+        systemRole,
+      });
+      await expect(service.assertAdministrator('dev-1')).rejects.toMatchObject({
+        response: { code: 'ADMIN_ROLE_REQUIRED' },
+      });
+    },
+  );
 
   it('rejects an approved user without administrative roles', async () => {
     userRepository.findUnique.mockResolvedValue({

@@ -28,8 +28,10 @@ exclusivamente de teste, sem derivá-lo da entrada HTTP.
 - criação exige conta aprovada com papel `MASTER`;
 - alterações são permitidas ao mestre responsável ou a um administrador;
 - aprovação e rejeição exigem conta administrativa aprovada;
-- capacidade administrativa aceita `SystemRole.ADMIN`, `SystemRole.DEV` ou
-  `ClubRole.ADMIN`, sempre com `AccountStatus.APPROVED`;
+- capacidade administrativa aceita somente `SystemRole.ADMIN` ou
+  `SystemRole.DEV`, sempre com `AccountStatus.APPROVED`;
+- `ClubRole.ADMIN` é um papel de negócio cumulativo e não concede, sozinho,
+  privilégios administrativos do sistema;
 - o sistema de RPG precisa existir e estar ativo;
 - alterações de conteúdo removem a aprovação anterior;
 - campanhas e one-shots alterados após aprovação deixam de ser públicos até

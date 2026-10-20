@@ -45,11 +45,6 @@ export class TableActorsService {
       select: {
         status: true,
         systemRole: true,
-        clubRoles: {
-          where: { role: ClubRole.ADMIN },
-          select: { id: true },
-          take: 1,
-        },
       },
     });
 
@@ -59,8 +54,7 @@ export class TableActorsService {
 
     const hasAdministrativeRole =
       user.systemRole === SystemRole.ADMIN ||
-      user.systemRole === SystemRole.DEV ||
-      user.clubRoles.length > 0;
+      user.systemRole === SystemRole.DEV;
 
     if (user.status !== AccountStatus.APPROVED || !hasAdministrativeRole) {
       throw forbidden(
