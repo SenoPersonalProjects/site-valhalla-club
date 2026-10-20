@@ -1,9 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import {
-  CampaignStatus,
-  OneShotStatus,
-  SessionStatus,
-} from '../generated/prisma/enums';
+import { CampaignStatus, SessionStatus } from '../generated/prisma/enums';
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { TableActorsService } from '../tables/table-actors.service';
@@ -112,6 +108,7 @@ export class SessionsService {
   async update(id: string, actorId: string, dto: UpdateSessionDto) {
     const session = await this.getByIdOrThrow(id);
     await this.actors.assertCanManage(this.ownerId(session), actorId);
+    this.assertCampaignSession(session);
 
     if (session.status !== SessionStatus.SCHEDULED) {
       throw conflict(
@@ -144,6 +141,7 @@ export class SessionsService {
   async changeStatus(id: string, actorId: string, dto: ChangeSessionStatusDto) {
     const session = await this.getByIdOrThrow(id);
     await this.actors.assertCanManage(this.ownerId(session), actorId);
+    this.assertCampaignSession(session);
 
     if (session.status !== SessionStatus.SCHEDULED) {
       throw conflict(
@@ -187,30 +185,10 @@ export class SessionsService {
         dto.status === SessionStatus.CANCELLED ? cancellationReason : null,
     };
 
-    if (!session.oneShotId) {
-      return this.prisma.session.update({
-        where: { id },
-        data: sessionUpdate,
-        include: sessionDetails,
-      });
-    }
-
-    const oneShotStatus =
-      dto.status === SessionStatus.CANCELLED
-        ? OneShotStatus.CANCELLED
-        : OneShotStatus.COMPLETED;
-
-    return this.prisma.$transaction(async (transaction) => {
-      await transaction.oneShot.update({
-        where: { id: session.oneShotId! },
-        data: { status: oneShotStatus },
-      });
-
-      return transaction.session.update({
-        where: { id },
-        data: sessionUpdate,
-        include: sessionDetails,
-      });
+    return this.prisma.session.update({
+      where: { id },
+      data: sessionUpdate,
+      include: sessionDetails,
     });
   }
 
@@ -234,6 +212,15 @@ export class SessionsService {
     }
 
     await this.prisma.session.delete({ where: { id } });
+  }
+
+  private assertCampaignSession(session: { oneShotId: string | null }): void {
+    if (session.oneShotId) {
+      throw conflict(
+        'ONE_SHOT_SESSION_MANAGED_BY_ONE_SHOT',
+        'A sessão deve ser alterada através do one-shot correspondente',
+      );
+    }
   }
 
   private async getByIdOrThrow(id: string) {

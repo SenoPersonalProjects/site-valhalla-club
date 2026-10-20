@@ -14,7 +14,7 @@ import { CreateOneShotDto } from './dto/create-one-shot.dto';
 import { ReviewOneShotDto } from './dto/review-one-shot.dto';
 import { UpdateOneShotDto } from './dto/update-one-shot.dto';
 
-const oneShotDetails = {
+const oneShotPrivateDetails = {
   master: {
     select: {
       id: true,
@@ -35,6 +35,18 @@ const oneShotDetails = {
     },
   },
 } satisfies Prisma.OneShotInclude;
+
+const oneShotPublicDetails = {
+  id: true,
+  title: true,
+  description: true,
+  status: true,
+  master: { select: { profile: { select: { displayName: true } } } },
+  gameSystem: { select: { id: true, code: true, name: true } },
+  session: {
+    select: { id: true, title: true, scheduledAt: true, status: true },
+  },
+} satisfies Prisma.OneShotSelect;
 
 @Injectable()
 export class OneShotsService {
@@ -63,7 +75,7 @@ export class OneShotsService {
           },
         },
       },
-      include: oneShotDetails,
+      include: oneShotPrivateDetails,
     });
   }
 
@@ -79,8 +91,8 @@ export class OneShotsService {
         where,
         skip,
         take: query.limit,
-        orderBy: { updatedAt: 'desc' },
-        include: oneShotDetails,
+        orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+        select: oneShotPublicDetails,
       }),
       this.prisma.oneShot.count({ where }),
     ]);
@@ -173,7 +185,7 @@ export class OneShotsService {
             ? { status: OneShotStatus.DRAFT }
             : {}),
         },
-        include: oneShotDetails,
+        include: oneShotPrivateDetails,
       });
     });
   }
@@ -237,7 +249,7 @@ export class OneShotsService {
     return this.prisma.oneShot.update({
       where: { id },
       data: { status: OneShotStatus.SCHEDULED },
-      include: oneShotDetails,
+      include: oneShotPrivateDetails,
     });
   }
 
@@ -309,7 +321,7 @@ export class OneShotsService {
       return transaction.oneShot.update({
         where: { id },
         data: { status: dto.status },
-        include: oneShotDetails,
+        include: oneShotPrivateDetails,
       });
     });
   }
@@ -355,14 +367,14 @@ export class OneShotsService {
           ? { status: OneShotStatus.DRAFT }
           : {}),
       },
-      include: oneShotDetails,
+      include: oneShotPrivateDetails,
     });
   }
 
   private async getByIdOrThrow(id: string) {
     const oneShot = await this.prisma.oneShot.findUnique({
       where: { id },
-      include: oneShotDetails,
+      include: oneShotPrivateDetails,
     });
 
     if (!oneShot) {

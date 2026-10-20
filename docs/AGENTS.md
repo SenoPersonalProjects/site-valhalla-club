@@ -62,8 +62,12 @@ Tipos de commit: `feat`, `fix`, `docs`, `chore`, `style`, `refactor` e `test`.
 
 A API possui a base NestJS, observabilidade, Prisma e o domínio de campanhas,
 sessões e one-shots. A autenticação e o JWT ainda não estão implementados. Até
-essa integração, `x-user-id` é apenas um adaptador de desenvolvimento e não deve
-ser tratado como autenticação válida para produção.
+essa integração, as rotas privadas falham fechadas com `401 USER_CONTEXT_REQUIRED`.
+`request.user.id` é o contrato esperado da futura infraestrutura confiável de
+autenticação. Nenhum header arbitrário, incluindo `x-user-id`, é tratado como
+identidade. Não criar fallback de produção que fabrique `request.user` com dados
+do cliente. Rotas públicas continuam acessíveis normalmente; contexto simulado
+de autenticação pertence exclusivamente ao código de teste.
 
 PostgreSQL e Prisma ORM são as decisões atuais para homologação. Schema e
 migrations são versionados. Em desenvolvimento, use `prisma migrate dev`; em

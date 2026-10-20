@@ -4,22 +4,20 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 
-type RequestWithHeaders = {
-  headers: Record<string, string | string[] | undefined>;
+// Populated exclusively by trusted authentication infrastructure.
+type RequestWithUser = {
+  user?: { id?: unknown };
 };
-
-export const USER_ID_HEADER = 'x-user-id';
 
 export const CurrentUserId = createParamDecorator(
   (_data: unknown, context: ExecutionContext): string => {
-    const request = context.switchToHttp().getRequest<RequestWithHeaders>();
-    const rawUserId = request.headers[USER_ID_HEADER];
-    const userId = Array.isArray(rawUserId) ? rawUserId[0] : rawUserId;
+    const request = context.switchToHttp().getRequest<RequestWithUser>();
+    const userId = request.user?.id;
 
-    if (!userId?.trim()) {
+    if (typeof userId !== 'string' || !userId.trim()) {
       throw new UnauthorizedException({
         code: 'USER_CONTEXT_REQUIRED',
-        message: `O cabeçalho ${USER_ID_HEADER} é obrigatório nesta fase da API`,
+        message: 'É necessário um contexto de usuário autenticado',
       });
     }
 

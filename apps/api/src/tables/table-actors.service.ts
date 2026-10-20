@@ -58,7 +58,9 @@ export class TableActorsService {
     }
 
     const hasAdministrativeRole =
-      user.systemRole === SystemRole.ADMIN || user.clubRoles.length > 0;
+      user.systemRole === SystemRole.ADMIN ||
+      user.systemRole === SystemRole.DEV ||
+      user.clubRoles.length > 0;
 
     if (user.status !== AccountStatus.APPROVED || !hasAdministrativeRole) {
       throw forbidden(

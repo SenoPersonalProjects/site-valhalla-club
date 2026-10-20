@@ -115,6 +115,123 @@ describe('OneShotsService', () => {
     });
   });
 
+  it('queries only public fields with deterministic pagination', async () => {
+    oneShotRepository.findMany.mockResolvedValue([]);
+    oneShotRepository.count.mockResolvedValue(21);
+    runTransaction.mockImplementation(async (operations: unknown) =>
+      Promise.all(operations as Promise<unknown>[]),
+    );
+    const result = await service.findPublic({ page: 2, limit: 10 });
+    expect(oneShotRepository.findMany).toHaveBeenCalledWith({
+      where: {
+        approvalStatus: ApprovalStatus.APPROVED,
+        status: OneShotStatus.SCHEDULED,
+      },
+      skip: 10,
+      take: 10,
+      orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        status: true,
+        master: { select: { profile: { select: { displayName: true } } } },
+        gameSystem: { select: { id: true, code: true, name: true } },
+        session: {
+          select: { id: true, title: true, scheduledAt: true, status: true },
+        },
+      },
+    });
+    expect(oneShotRepository.count).toHaveBeenCalledWith({
+      where: {
+        approvalStatus: ApprovalStatus.APPROVED,
+        status: OneShotStatus.SCHEDULED,
+      },
+    });
+    expect(result.meta).toEqual({ page: 2, limit: 10, total: 21, pages: 3 });
+  });
+
+  it('updates session content and clears previous approval atomically', async () => {
+    oneShotRepository.findUnique.mockResolvedValue({
+      ...oneShot,
+      status: OneShotStatus.SCHEDULED,
+      approvalStatus: ApprovalStatus.APPROVED,
+      reviewedById: 'admin-1',
+      reviewedAt: new Date(),
+      reviewNote: 'Aprovado',
+    });
+    const transaction = {
+      session: { update: jest.fn() },
+      oneShot: { update: jest.fn().mockResolvedValue(oneShot) },
+    };
+    runTransaction.mockImplementation(async (operation: unknown) =>
+      (operation as (client: typeof transaction) => Promise<unknown>)(
+        transaction,
+      ),
+    );
+    await service.update('one-shot-1', 'master-1', {
+      session: {
+        title: ' Novo título ',
+        scheduledAt: futureDate.toISOString(),
+      },
+    });
+    expect(transaction.session.update).toHaveBeenCalledWith({
+      where: { id: 'session-1' },
+      data: { title: 'Novo título', scheduledAt: futureDate },
+    });
+    expect(transaction.oneShot.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'one-shot-1' },
+        data: {
+          approvalStatus: ApprovalStatus.PENDING,
+          status: OneShotStatus.DRAFT,
+          reviewedById: null,
+          reviewedAt: null,
+          reviewNote: null,
+        },
+      }),
+    );
+    expect(runTransaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('synchronizes one-shot and session completion atomically', async () => {
+    oneShotRepository.findUnique.mockResolvedValue({
+      ...oneShot,
+      status: OneShotStatus.SCHEDULED,
+      session: {
+        ...oneShot.session,
+        scheduledAt: new Date(Date.now() - 86_400_000),
+      },
+    });
+    const transaction = {
+      session: { update: jest.fn() },
+      oneShot: { update: jest.fn().mockResolvedValue(oneShot) },
+    };
+    runTransaction.mockImplementation(async (operation: unknown) =>
+      (operation as (client: typeof transaction) => Promise<unknown>)(
+        transaction,
+      ),
+    );
+    await service.changeStatus('one-shot-1', 'master-1', {
+      status: OneShotStatus.COMPLETED,
+    });
+    expect(transaction.session.update).toHaveBeenCalledWith({
+      where: { id: 'session-1' },
+      data: {
+        status: SessionStatus.COMPLETED,
+        cancelledAt: null,
+        cancellationReason: null,
+      },
+    });
+    expect(transaction.oneShot.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'one-shot-1' },
+        data: { status: OneShotStatus.COMPLETED },
+      }),
+    );
+    expect(runTransaction).toHaveBeenCalledTimes(1);
+  });
+
   it('synchronizes one-shot and session cancellation', async () => {
     oneShotRepository.findUnique.mockResolvedValue({
       ...oneShot,

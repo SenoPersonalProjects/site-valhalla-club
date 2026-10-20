@@ -9,28 +9,27 @@ O domínio de mesas separa campanhas contínuas de aventuras one-shot:
 - uma sessão pertence a uma campanha ou a um one-shot, nunca aos dois;
 - publicação e aprovação administrativa são operações diferentes.
 
-## Autenticação temporária
+## Contexto autenticado
 
-As rotas privadas recebem o identificador do ator no cabeçalho:
+Rotas públicas continuam acessíveis normalmente. Rotas privadas exigem um
+`request.user.id` string não vazia, fornecido exclusivamente por infraestrutura
+confiável de autenticação. Esse é o contrato esperado da futura camada de
+autenticação; autenticação/JWT ainda não foi implementada.
 
-```http
-x-user-id: id-do-usuario
-```
-
-Esse cabeçalho existe somente como fronteira temporária enquanto o módulo de
-autenticação não está disponível. Ele permite testar as regras de domínio sem
-colocar o identificador do mestre nos DTOs.
-
-O cabeçalho **não é autenticação** e não torna a API segura para exposição
-pública. Antes da produção, o decorator `CurrentUserId` deve obter a identidade
-validada pelo mecanismo de autenticação, e o cabeçalho não deve ser aceito como
-prova de identidade.
+Enquanto a integração não existir, as rotas privadas falham fechadas com
+`401 USER_CONTEXT_REQUIRED`. Nenhum header arbitrário enviado pelo cliente é
+tratado como identidade: enviar somente `x-user-id` também retorna 401.
+Não existe fallback de produção que converta headers, query, body ou cookies
+não validados em `request.user`. Testes podem fornecer contexto por middleware
+exclusivamente de teste, sem derivá-lo da entrada HTTP.
 
 ## Regras de acesso
 
 - criação exige conta aprovada com papel `MASTER`;
 - alterações são permitidas ao mestre responsável ou a um administrador;
 - aprovação e rejeição exigem conta administrativa aprovada;
+- capacidade administrativa aceita `SystemRole.ADMIN`, `SystemRole.DEV` ou
+  `ClubRole.ADMIN`, sempre com `AccountStatus.APPROVED`;
 - o sistema de RPG precisa existir e estar ativo;
 - alterações de conteúdo removem a aprovação anterior;
 - campanhas e one-shots alterados após aprovação deixam de ser públicos até
@@ -96,7 +95,10 @@ Regras:
 - cancelamento exige motivo;
 - sessão futura não pode ser concluída;
 - a sessão obrigatória de um one-shot não pode ser apagada isoladamente;
-- mudanças de estado na sessão de um one-shot atualizam também o one-shot.
+- alterações diretas de título, data ou estado da sessão de one-shot retornam
+  `ONE_SHOT_SESSION_MANAGED_BY_ONE_SHOT` antes de qualquer escrita;
+- todas as mutações do agregado OneShot + Session passam por `OneShotsService`,
+  que sincroniza os estados e remove a aprovação anterior ao editar conteúdo.
 
 ## One-shots
 
@@ -159,6 +161,8 @@ aprovação para `PENDING` e retira a mesa da listagem pública.
 - `participating`: participações do usuário em sessões.
 
 Isso mantém separadas a função de mestre e a participação como jogador.
+Esta rota permanece sem paginação; paginar suas três coleções exige um contrato
+próprio e fica como melhoria futura.
 
 ## Paginação pública
 
@@ -166,6 +170,19 @@ As listagens públicas aceitam:
 
 - `page`: página iniciando em `1`;
 - `limit`: de `1` a `50`, padrão `20`.
+
+A resposta mantém `items` e `meta: { page, limit, total, pages }`. A ordenação é
+`updatedAt desc, id desc`, com desempate determinístico entre registros com a
+mesma data. As sessões públicas de campanhas usam `scheduledAt asc, id asc`.
+Isso estabiliza empates; paginação por offset ainda pode variar sob edições
+concorrentes entre requisições.
+
+As queries públicas selecionam somente id, título, descrição, status, sistema de
+RPG, `master.profile.displayName` e dados básicos de sessão (id, título, data e
+status). Não solicitam reports, sanctionScopes, contagens disciplinares, evidências,
+campos administrativos ou identificadores pessoais do mestre. `master.id` foi
+removido apenas das projeções públicas, sem consumidor atual no repositório.
+As projeções privadas são preservadas.
 
 ## Exclusão e preservação de histórico
 

@@ -14,9 +14,10 @@ describe('CampaignsService', () => {
     findMany: jest.fn<RepositoryMethod>(),
     count: jest.fn<RepositoryMethod>(),
   };
+  const runTransaction = jest.fn();
   const prisma = {
     campaign: campaignRepository,
-    $transaction: jest.fn(),
+    $transaction: runTransaction,
   } as unknown as PrismaService;
   const actorMethods = {
     assertMaster: jest.fn<(userId: string) => Promise<void>>(),
@@ -80,6 +81,43 @@ describe('CampaignsService', () => {
       title: 'Crônicas do Norte',
       description: 'Campanha semanal',
     });
+  });
+
+  it('queries only public fields with deterministic pagination', async () => {
+    campaignRepository.findMany.mockResolvedValue([]);
+    campaignRepository.count.mockResolvedValue(21);
+    runTransaction.mockImplementation((operations: Promise<unknown>[]) =>
+      Promise.all(operations),
+    );
+    const result = await service.findPublic({ page: 2, limit: 10 });
+    expect(campaignRepository.findMany).toHaveBeenCalledWith({
+      where: {
+        approvalStatus: ApprovalStatus.APPROVED,
+        status: CampaignStatus.ACTIVE,
+      },
+      skip: 10,
+      take: 10,
+      orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        status: true,
+        master: { select: { profile: { select: { displayName: true } } } },
+        gameSystem: { select: { id: true, code: true, name: true } },
+        sessions: {
+          orderBy: [{ scheduledAt: 'asc' }, { id: 'asc' }],
+          select: { id: true, title: true, scheduledAt: true, status: true },
+        },
+      },
+    });
+    expect(campaignRepository.count).toHaveBeenCalledWith({
+      where: {
+        approvalStatus: ApprovalStatus.APPROVED,
+        status: CampaignStatus.ACTIVE,
+      },
+    });
+    expect(result.meta).toEqual({ page: 2, limit: 10, total: 21, pages: 3 });
   });
 
   it('returns an approved active campaign to draft review after editing', async () => {

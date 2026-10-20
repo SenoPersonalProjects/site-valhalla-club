@@ -8,11 +8,21 @@ import {
   NotFoundException,
   Post,
 } from '@nestjs/common';
+import { Request, Response, NextFunction } from 'express';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { StructuredLoggerService } from './../src/observability/structured-logger.service';
 import { PrismaService } from './../src/prisma/prisma.service';
+import { CurrentUserId } from './../src/common/http/current-user-id.decorator';
+
+@Controller('__test/context')
+class UserContextTestController {
+  @Get()
+  read(@CurrentUserId() userId: string) {
+    return { userId };
+  }
+}
 
 const UUID_V4_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -56,6 +66,7 @@ class ObservabilityTestController {
 
 describe('AppController (e2e)', () => {
   let app: INestApplication<App>;
+  let trustedUser: { id?: unknown } | undefined;
   let structuredLogger: {
     info: jest.MockedFunction<LogMethod>;
     warn: jest.MockedFunction<LogMethod>;
@@ -63,6 +74,7 @@ describe('AppController (e2e)', () => {
   };
 
   beforeEach(async () => {
+    trustedUser = undefined;
     structuredLogger = {
       info: jest.fn<LogMethod>(),
       warn: jest.fn<LogMethod>(),
@@ -71,18 +83,43 @@ describe('AppController (e2e)', () => {
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-      controllers: [ErrorTestController, ObservabilityTestController],
+      controllers: [
+        ErrorTestController,
+        ObservabilityTestController,
+        UserContextTestController,
+      ],
     })
       .overrideProvider(PrismaService)
       .useValue({
         onModuleInit: jest.fn(),
         onModuleDestroy: jest.fn(),
+        campaign: {
+          findMany: jest.fn().mockResolvedValue([]),
+          count: jest.fn().mockResolvedValue(0),
+        },
+        oneShot: {
+          findMany: jest.fn().mockResolvedValue([]),
+          count: jest.fn().mockResolvedValue(0),
+        },
+        $transaction: (operations: Promise<unknown>[]) =>
+          Promise.all(operations),
       })
       .overrideProvider(StructuredLoggerService)
       .useValue(structuredLogger)
       .compile();
 
     app = moduleFixture.createNestApplication();
+    // Test infrastructure supplies context from test state, never from HTTP input.
+    app.use(
+      (
+        req: Request & { user?: { id?: unknown } },
+        _res: Response,
+        next: NextFunction,
+      ) => {
+        req.user = trustedUser;
+        next();
+      },
+    );
     await app.init();
   });
 
@@ -104,10 +141,64 @@ describe('AppController (e2e)', () => {
     });
   });
 
+  it.each([
+    '/tables/me',
+    '/campaigns/campaign-1',
+    '/one-shots/one-shot-1',
+    '/sessions/session-1',
+  ])('does not authenticate %s with x-user-id alone', async (path) => {
+    const response = await request(app.getHttpServer())
+      .get(path)
+      .set('x-user-id', 'master-1')
+      .expect(401);
+    expect(readResponseBody(response)).toMatchObject({
+      code: 'USER_CONTEXT_REQUIRED',
+    });
+  });
+
+  it.each([
+    {},
+    { id: '' },
+    { id: '  ' },
+    { id: 123 },
+    { id: ['master-1'] },
+    { id: null },
+  ])('rejects invalid trusted context %j', async (user) => {
+    trustedUser = user;
+    const response = await request(app.getHttpServer())
+      .get('/__test/context')
+      .expect(401);
+    expect(readResponseBody(response)).toMatchObject({
+      code: 'USER_CONTEXT_REQUIRED',
+    });
+  });
+
+  it('accepts request.user.id supplied by trusted test infrastructure', async () => {
+    trustedUser = { id: 'master-1' };
+    await request(app.getHttpServer())
+      .get('/__test/context')
+      .set('x-user-id', 'different-user')
+      .expect(200)
+      .expect({ userId: 'master-1' });
+  });
+
+  it.each(['/campaigns/public', '/one-shots/public'])(
+    'keeps %s accessible without authenticated context',
+    async (path) => {
+      await request(app.getHttpServer())
+        .get(path)
+        .expect(200)
+        .expect({
+          items: [],
+          meta: { page: 1, limit: 20, total: 0, pages: 0 },
+        });
+    },
+  );
+
   it('validates campaign input before reaching the domain service', async () => {
+    trustedUser = { id: 'master-1' };
     const response = await request(app.getHttpServer())
       .post('/campaigns')
-      .set('x-user-id', 'master-1')
       .send({ title: 'Campanha sem sistema' })
       .expect(400);
 
@@ -118,9 +209,9 @@ describe('AppController (e2e)', () => {
   });
 
   it('validates the mandatory session of a one-shot', async () => {
+    trustedUser = { id: 'master-1' };
     const response = await request(app.getHttpServer())
       .post('/one-shots')
-      .set('x-user-id', 'master-1')
       .send({ gameSystemId: 'system-1', title: 'One-shot incompleto' })
       .expect(400);
 

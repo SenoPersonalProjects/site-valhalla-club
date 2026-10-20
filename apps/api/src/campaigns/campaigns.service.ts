@@ -29,6 +29,19 @@ const campaignDetails = {
   },
 } satisfies Prisma.CampaignInclude;
 
+const campaignPublicDetails = {
+  id: true,
+  title: true,
+  description: true,
+  status: true,
+  master: { select: { profile: { select: { displayName: true } } } },
+  gameSystem: { select: { id: true, code: true, name: true } },
+  sessions: {
+    orderBy: [{ scheduledAt: 'asc' }, { id: 'asc' }],
+    select: { id: true, title: true, scheduledAt: true, status: true },
+  },
+} satisfies Prisma.CampaignSelect;
+
 @Injectable()
 export class CampaignsService {
   constructor(
@@ -65,8 +78,8 @@ export class CampaignsService {
         where,
         skip,
         take: query.limit,
-        orderBy: { updatedAt: 'desc' },
-        include: campaignDetails,
+        orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+        select: campaignPublicDetails,
       }),
       this.prisma.campaign.count({ where }),
     ]);

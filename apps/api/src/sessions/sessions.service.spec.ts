@@ -21,9 +21,11 @@ describe('SessionsService', () => {
   };
   const campaignRepository = { findUnique: jest.fn<RepositoryMethod>() };
   const runTransaction = jest.fn<TransactionRunner>();
+  const oneShotRepository = { update: jest.fn<RepositoryMethod>() };
   const prisma = {
     session: sessionRepository,
     campaign: campaignRepository,
+    oneShot: oneShotRepository,
     $transaction: runTransaction,
   } as unknown as PrismaService;
   const actorMethods = {
@@ -87,42 +89,103 @@ describe('SessionsService', () => {
     });
   });
 
-  it('synchronizes a one-shot when its session is completed', async () => {
-    const oneShotSession = {
-      ...campaignSession,
-      campaignId: null,
-      oneShotId: 'one-shot-1',
-      scheduledAt: pastDate,
-      campaign: null,
-      oneShot: {
-        id: 'one-shot-1',
-        title: 'One-shot',
-        masterId: 'master-1',
-        status: OneShotStatus.SCHEDULED,
-        approvalStatus: ApprovalStatus.APPROVED,
-      },
-    };
-    sessionRepository.findUnique.mockResolvedValue(oneShotSession);
+  it.each([
+    { title: 'Novo título' },
+    { scheduledAt: futureDate.toISOString() },
+  ])(
+    'blocks a direct one-shot session update: %j without writes',
+    async (dto) => {
+      sessionRepository.findUnique.mockResolvedValue({
+        ...campaignSession,
+        campaignId: null,
+        campaign: null,
+        oneShotId: 'one-shot-1',
+        oneShot: {
+          id: 'one-shot-1',
+          title: 'One-shot',
+          masterId: 'master-1',
+          status: OneShotStatus.SCHEDULED,
+          approvalStatus: ApprovalStatus.APPROVED,
+        },
+      });
+      await expect(
+        service.update('session-1', 'master-1', dto),
+      ).rejects.toMatchObject({
+        response: { code: 'ONE_SHOT_SESSION_MANAGED_BY_ONE_SHOT' },
+      });
+      expect(sessionRepository.update).not.toHaveBeenCalled();
+      expect(oneShotRepository.update).not.toHaveBeenCalled();
+      expect(runTransaction).not.toHaveBeenCalled();
+    },
+  );
 
-    const transaction = {
-      oneShot: { update: jest.fn() },
-      session: { update: jest.fn().mockResolvedValue(oneShotSession) },
-    };
-    runTransaction.mockImplementation(async (operation: unknown) =>
-      (operation as (client: typeof transaction) => Promise<unknown>)(
-        transaction,
-      ),
+  it.each([SessionStatus.CANCELLED, SessionStatus.COMPLETED])(
+    'blocks direct one-shot session status %s without writes',
+    async (status) => {
+      const oneShotSession = {
+        ...campaignSession,
+        campaignId: null,
+        oneShotId: 'one-shot-1',
+        scheduledAt: pastDate,
+        campaign: null,
+        oneShot: {
+          id: 'one-shot-1',
+          title: 'One-shot',
+          masterId: 'master-1',
+          status: OneShotStatus.SCHEDULED,
+          approvalStatus: ApprovalStatus.APPROVED,
+        },
+      };
+      sessionRepository.findUnique.mockResolvedValue(oneShotSession);
+
+      await expect(
+        service.changeStatus('session-1', 'master-1', {
+          status,
+          reason: 'Cancelamento',
+        }),
+      ).rejects.toMatchObject({
+        response: { code: 'ONE_SHOT_SESSION_MANAGED_BY_ONE_SHOT' },
+      });
+      expect(sessionRepository.update).not.toHaveBeenCalled();
+      expect(oneShotRepository.update).not.toHaveBeenCalled();
+      expect(runTransaction).not.toHaveBeenCalled();
+    },
+  );
+
+  it('updates a campaign session normally', async () => {
+    sessionRepository.findUnique.mockResolvedValue(campaignSession);
+    await service.update('session-1', 'master-1', {
+      title: ' Novo título ',
+      scheduledAt: futureDate.toISOString(),
+    });
+    expect(sessionRepository.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'session-1' },
+        data: { title: 'Novo título', scheduledAt: futureDate },
+      }),
     );
-
-    await service.changeStatus('session-1', 'master-1', {
-      status: SessionStatus.COMPLETED,
-    });
-
-    expect(transaction.oneShot.update).toHaveBeenCalledWith({
-      where: { id: 'one-shot-1' },
-      data: { status: OneShotStatus.COMPLETED },
-    });
   });
+
+  it.each([SessionStatus.CANCELLED, SessionStatus.COMPLETED])(
+    'changes campaign session status to %s normally',
+    async (status) => {
+      sessionRepository.findUnique.mockResolvedValue({
+        ...campaignSession,
+        scheduledAt: pastDate,
+      });
+      await service.changeStatus('session-1', 'master-1', {
+        status,
+        reason: 'Motivo',
+      });
+      expect(sessionRepository.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'session-1' },
+          data: expect.objectContaining({ status }),
+        }),
+      );
+      expect(runTransaction).not.toHaveBeenCalled();
+    },
+  );
 
   it('does not delete the mandatory session of a one-shot', async () => {
     sessionRepository.findUnique.mockResolvedValue({
@@ -144,6 +207,8 @@ describe('SessionsService', () => {
         response: { code: 'ONE_SHOT_SESSION_DELETE_NOT_ALLOWED' },
       },
     );
+    expect(sessionRepository.delete).not.toHaveBeenCalled();
+    expect(runTransaction).not.toHaveBeenCalled();
   });
 
   it('does not complete a future session', async () => {

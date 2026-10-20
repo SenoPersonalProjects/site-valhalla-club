@@ -17,6 +17,12 @@ O MVP institucional está **homologado e em preparação para produção**. A pu
 
 A landing pública não depende da API em runtime.
 
+As rotas públicas da API continuam acessíveis sem autenticação. Rotas privadas
+exigem `request.user.id`, contrato da futura infraestrutura confiável de
+autenticação. Enquanto essa integração não existir, falham fechadas com
+`401 USER_CONTEXT_REQUIRED`. Nenhum header arbitrário do cliente, incluindo
+`x-user-id`, é tratado como identidade. Autenticação/JWT ainda não foi implementada.
+
 ## Stack
 
 | Área      | Tecnologias e estado                                                          |
