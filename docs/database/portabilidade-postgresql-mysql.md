@@ -619,7 +619,7 @@ Configurações que alteram semântica também precisam ser avaliadas. No MySQL,
 
 Os testes devem cobrir especialmente:
 
-- UUID;
+- identificadores textuais e preservação de IDs;
 - datas;
 - UTC;
 - timezone;
@@ -673,7 +673,7 @@ A migração entre providers deverá utilizar um processo de ETL controlado. Ent
 
 A ferramenta não deve ser escolhida antes de se conhecer o schema real, o volume e os requisitos operacionais.
 
-Os UUIDs devem ser preservados durante a migração. Recomenda-se evitar a geração de novos IDs e a construção de mapas de chave sem necessidade.
+Os identificadores existentes devem ser preservados durante a migração. Recomenda-se evitar a geração de novos IDs e a construção de mapas de chave sem necessidade.
 
 Também deverão ser preservados:
 
@@ -733,7 +733,7 @@ validação
 A validação não deve se limitar à contagem de registros. Quando aplicável, deverá verificar:
 
 - quantidade de registros;
-- conjuntos de UUIDs;
+- conjuntos de identificadores;
 - registros ausentes;
 - registros extras;
 - duplicidades;
