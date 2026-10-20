@@ -2,6 +2,7 @@ import { ApprovalStatus, CampaignStatus } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { TableActorsService } from '../tables/table-actors.service';
 import { CampaignsService } from './campaigns.service';
+import { TableRulesService } from '../tables/table-rules.service';
 
 describe('CampaignsService', () => {
   type RepositoryMethod = (args: unknown) => Promise<unknown>;
@@ -30,6 +31,7 @@ describe('CampaignsService', () => {
   const service = new CampaignsService(
     prisma,
     actorMethods as unknown as TableActorsService,
+    new TableRulesService(prisma),
   );
 
   const campaign = {
@@ -52,6 +54,11 @@ describe('CampaignsService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    runTransaction.mockImplementation(
+      async (operation: (client: PrismaService) => Promise<unknown>) =>
+        operation(prisma),
+    );
+    campaignRepository.count.mockResolvedValue(0);
     actorMethods.assertMaster.mockResolvedValue();
     actorMethods.assertAdministrator.mockResolvedValue();
     actorMethods.assertCanManage.mockResolvedValue();
@@ -81,6 +88,84 @@ describe('CampaignsService', () => {
       title: 'Crônicas do Norte',
       description: 'Campanha semanal',
     });
+    expect(campaignRepository.count).not.toHaveBeenCalled();
+    expect(runTransaction).not.toHaveBeenCalled();
+  });
+
+  it.each([0, 1])('publishes with %i other active campaigns', async (count) => {
+    campaignRepository.findUnique.mockResolvedValue({
+      ...campaign,
+      approvalStatus: ApprovalStatus.APPROVED,
+    });
+    campaignRepository.count.mockResolvedValue(count);
+    await service.publish('campaign-1', 'master-1');
+    expect(campaignRepository.count).toHaveBeenCalledWith({
+      where: {
+        masterId: 'master-1',
+        status: CampaignStatus.ACTIVE,
+        id: { not: 'campaign-1' },
+      },
+    });
+    expect(campaignRepository.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { status: CampaignStatus.ACTIVE } }),
+    );
+    expect(runTransaction).toHaveBeenCalledWith(expect.any(Function), {
+      isolationLevel: 'Serializable',
+    });
+  });
+
+  it.each(['master-1', 'admin-1'])(
+    'rejects a third active campaign even for %s',
+    async (actorId) => {
+      campaignRepository.findUnique.mockResolvedValue({
+        ...campaign,
+        approvalStatus: ApprovalStatus.APPROVED,
+      });
+      campaignRepository.count.mockResolvedValue(2);
+      await expect(
+        service.publish('campaign-1', actorId),
+      ).rejects.toMatchObject({
+        response: { code: 'CAMPAIGN_ACTIVE_LIMIT_REACHED' },
+      });
+      expect(campaignRepository.update).not.toHaveBeenCalled();
+    },
+  );
+
+  it('does not count itself twice when republishing an active campaign', async () => {
+    campaignRepository.findUnique.mockResolvedValue({
+      ...campaign,
+      status: CampaignStatus.ACTIVE,
+      approvalStatus: ApprovalStatus.APPROVED,
+    });
+    campaignRepository.count.mockResolvedValue(1);
+    await service.publish('campaign-1', 'master-1');
+    expect(campaignRepository.count).toHaveBeenCalledWith({
+      where: {
+        masterId: 'master-1',
+        status: CampaignStatus.ACTIVE,
+        id: { not: 'campaign-1' },
+      },
+    });
+  });
+
+  it('ignores draft, inactive and archived campaigns in the active quota', async () => {
+    const statuses = [
+      CampaignStatus.ACTIVE,
+      CampaignStatus.DRAFT,
+      CampaignStatus.DRAFT,
+      CampaignStatus.INACTIVE,
+      CampaignStatus.ARCHIVED,
+    ];
+    campaignRepository.findUnique.mockResolvedValue({
+      ...campaign,
+      approvalStatus: ApprovalStatus.APPROVED,
+    });
+    campaignRepository.count.mockImplementation(async (input: unknown) => {
+      const { where } = input as { where: { status: string } };
+      return statuses.filter((status) => status === where.status).length;
+    });
+    await service.publish('campaign-1', 'master-1');
+    expect(campaignRepository.update).toHaveBeenCalled();
   });
 
   it('queries only public fields with deterministic pagination', async () => {

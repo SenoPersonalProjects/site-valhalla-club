@@ -19,7 +19,10 @@ describe('SessionsService', () => {
     update: jest.fn<RepositoryMethod>(),
     delete: jest.fn<RepositoryMethod>(),
   };
-  const campaignRepository = { findUnique: jest.fn<RepositoryMethod>() };
+  const campaignRepository = {
+    findUnique: jest.fn<RepositoryMethod>(),
+    update: jest.fn<RepositoryMethod>(),
+  };
   const runTransaction = jest.fn<TransactionRunner>();
   const oneShotRepository = { update: jest.fn<RepositoryMethod>() };
   const prisma = {
@@ -87,6 +90,28 @@ describe('SessionsService', () => {
       oneShotId: null,
       title: 'Abertura',
     });
+  });
+
+  it('adds a session beyond 30 days to an approved campaign without removing approval', async () => {
+    campaignRepository.findUnique.mockResolvedValue({
+      masterId: 'master-1',
+      status: CampaignStatus.ACTIVE,
+      approvalStatus: ApprovalStatus.APPROVED,
+    });
+    const scheduledAt = new Date(Date.now() + 60 * 86_400_000);
+    await service.createForCampaign('campaign-1', 'master-1', {
+      scheduledAt: scheduledAt.toISOString(),
+    });
+    expect(sessionRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          campaignId: 'campaign-1',
+          scheduledAt,
+        }),
+      }),
+    );
+    expect(campaignRepository.update).not.toHaveBeenCalled();
+    expect(runTransaction).not.toHaveBeenCalled();
   });
 
   it.each([

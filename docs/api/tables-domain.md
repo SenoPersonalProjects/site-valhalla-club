@@ -70,6 +70,31 @@ Estados:
 Uma campanha só entra em `ACTIVE` pelo endpoint de publicação e depois de
 receber aprovação administrativa.
 
+Cada mestre pode ter no máximo **2 campanhas ACTIVE simultaneamente**. DRAFTs
+não têm limite por essa regra. Publicação/republicação conta outras campanhas
+ACTIVE do mestre, excluindo a própria; ADMIN/DEV também respeitam o limite.
+Contagem, leitura da aprovação e ativação ocorrem na mesma transação Serializable.
+Alterações de conteúdo da campanha removem aprovação e, se ACTIVE, levam a
+INACTIVE. Adicionar sessões posteriores não remove a aprovação da campanha.
+
+### Inatividade e reconciliação
+
+Uma campanha ACTIVE é inativada quando seu `updatedAt` é estritamente anterior
+a `agora - 30 dias` e não há sessão não CANCELLED com `scheduledAt >= cutoff`.
+Sessões recentes, no exato cutoff ou futuras mantêm atividade; sessões CANCELLED
+não mantêm a campanha ativa. `updatedAt` fornece o baseline de publicação, dando
+aproximadamente 30 dias a uma campanha recém-publicada sem sessões. Como não há
+`publishedAt`, qualquer escrita posterior na campanha também renova esse baseline.
+
+`CampaignInactivityService` usa um `updateMany` Prisma tipado, idempotente, apenas
+ACTIVE → INACTIVE. DRAFT/INACTIVE/ARCHIVED não são alteradas. Executa no startup
+e a cada hora via `@nestjs/schedule` (6.1.3, compatível com NestJS 11/CommonJS).
+GETs não fazem reconciliação nem escrita. Instâncias evitam sobreposição local;
+execuções em múltiplas instâncias são seguras pela condição idempotente.
+Ambientes gratuitos que dormem fazem catch-up no startup quando reiniciam;
+não há execução enquanto a API dorme. Uma falha gera evento seguro de log e
+nova tentativa no próximo ciclo/startup, sem expor detalhes de conexão.
+
 ## Sessões
 
 | Método   | Rota                              | Descrição                                |
@@ -114,6 +139,7 @@ Regras:
 | `POST`   | `/one-shots/:id/publish`        | Publica um one-shot aprovado               |
 | `PATCH`  | `/one-shots/:id/status`         | Cancela ou conclui o one-shot              |
 | `PATCH`  | `/admin/one-shots/:id/approval` | Aprova ou rejeita o one-shot               |
+| `PATCH`  | `/admin/one-shots/:id/correction` | Corrige sistema/data sob as mesmas quotas |
 
 Exemplo de criação:
 
@@ -124,7 +150,7 @@ Exemplo de criação:
   "description": "Aventura fechada para uma única noite.",
   "session": {
     "title": "A Torre Perdida",
-    "scheduledAt": "2026-11-21T22:00:00.000Z"
+    "scheduledAt": "2026-11-14T22:00:00.000Z"
   }
 }
 ```
@@ -135,6 +161,76 @@ Estados:
 - `SCHEDULED`: aprovado e publicado;
 - `CANCELLED`: cancelado com a sessão correspondente;
 - `COMPLETED`: concluído com a sessão correspondente.
+
+### Quota global e agenda
+
+O clube pode cadastrar no máximo **5 one-shots por sistema de RPG e mês civil**,
+globalmente, sem separação por mestre. O bucket usa `gameSystemId` e o mês de
+`Session.scheduledAt` em **America/Maceio**. A consulta usa início inclusivo e
+fim exclusivo do mês convertidos para UTC; a persistência continua em instantes
+UTC, independentemente do fuso do processo. Por exemplo, `2026-11-01T02:59:59Z`
+ainda pertence a outubro no clube; às `03:00:00Z` começa novembro.
+Agendamentos de one-shot devem informar timestamp ISO com `Z` ou offset
+explícito; horário local sem offset é inválido (`SESSION_DATE_MUST_BE_FUTURE`),
+evitando interpretação pelo fuso do servidor.
+
+Todos os estados contam enquanto o registro existir: DRAFT, SCHEDULED,
+**CANCELLED** e COMPLETED. Cancelar não libera quota. Exclusão física legítima
+de DRAFT sem histórico libera a vaga. Outro sistema ou outro mês tem bucket
+independente. Aprovar/publicar não cria uma segunda cobrança de quota.
+
+Na criação, validar mestre, sistema ativo, data futura e janela máxima de
+**30 × 24 horas** em relação ao instante atual; o limite exato é permitido,
+qualquer valor posterior é rejeitado. Essa janela não se aplica às sessões de
+Campaign. A contagem e a criação aninhada OneShot + Session ocorrem atomicamente
+na mesma transação Serializable.
+
+### Correção administrativa de sistema/data
+
+O PATCH comum permite título, descrição e título da sessão, removendo aprovação
+e devolvendo SCHEDULED a DRAFT. Enviar `gameSystemId` ou `session.scheduledAt`
+nesse PATCH retorna `ONE_SHOT_ADMIN_CORRECTION_REQUIRED`, inclusive para um
+administrador: a fronteira estrutural é explícita.
+
+`PATCH /admin/one-shots/:id/correction` exige `assertAdministrator`: conta APPROVED
+com SystemRole.ADMIN ou DEV; ClubRole.ADMIN isolado não autoriza. O corpo aceita
+somente `gameSystemId` e/ou `scheduledAt`, com ao menos um campo:
+
+```json
+{
+  "gameSystemId": "id-do-sistema",
+  "scheduledAt": "2026-11-14T22:00:00.000Z"
+}
+```
+
+Datas de exemplos devem ser ajustadas ao instante da chamada para respeitar a
+janela. A correção valida o sistema e a data efetivos, recalcula o mês, conta
+o destino excluindo o próprio registro e atualiza Session + OneShot atomicamente.
+Reseta aprovação para PENDING, limpa reviewedById/reviewedAt/reviewNote e devolve
+SCHEDULED a DRAFT. CANCELLED/COMPLETED permanecem fechados. **ADMIN/DEV não
+bypassam quota nem janela**; a intervenção define quem corrige, não uma exceção.
+
+### Concorrência e erros operacionais
+
+`TableRulesService` centraliza quotas, calendário e janela. Publicação de campanha,
+criação e correção estrutural de one-shot usam `$transaction` com Serializable.
+Conflitos Prisma `P2034` repetem a operação inteira, incluindo as leituras, até
+três tentativas no total. Após esgotamento, retornar 409 `TABLE_CONCURRENT_CHANGE`;
+não reaproveitar contagem anterior ou continuar com escrita fora da transação.
+Rollback é responsabilidade da transação Prisma. Não há SQL raw, lock de provider
+ou dependência de Supabase nessas regras.
+
+| Código | HTTP | Condição |
+| --- | --- | --- |
+| `CAMPAIGN_ACTIVE_LIMIT_REACHED` | 409 | Já existem 2 outras campanhas ACTIVE do mestre |
+| `ONE_SHOT_MONTHLY_LIMIT_REACHED` | 409 | Já existem 5 outros registros no bucket de destino |
+| `ONE_SHOT_SCHEDULE_TOO_FAR` | 400 | Agendamento excede 30 dias |
+| `ONE_SHOT_ADMIN_CORRECTION_REQUIRED` | 409 | PATCH comum tenta enviar sistema/data |
+| `ONE_SHOT_CORRECTION_EMPTY` | 400 | Correção sem campos estruturais |
+| `TABLE_CONCURRENT_CHANGE` | 409 | Três conflitos de serialização consecutivos |
+
+Continuam válidos `SESSION_DATE_MUST_BE_FUTURE`, `ONE_SHOT_CLOSED`,
+`ONE_SHOT_WITHOUT_SESSION`, `ADMIN_ROLE_REQUIRED` e os erros de aprovação.
 
 ## Aprovação administrativa
 
@@ -152,8 +248,11 @@ Decisões aceitas:
 - `APPROVED`;
 - `REJECTED`, obrigatoriamente acompanhada de justificativa.
 
-Editar título, descrição, sistema ou sessão de uma mesa aprovada redefine a
-aprovação para `PENDING` e retira a mesa da listagem pública.
+Editar conteúdo de Campaign ou OneShot aprovado redefine aprovação para PENDING
+e retira a mesa da listagem pública quando aplicável. Novas sessões de Campaign
+não removem aprovação; correção estrutural de OneShot é exclusivamente
+administrativa e também remove aprovação. Publicação continua exigindo aprovação
+inicial em ambos os agregados.
 
 ## Mesas do usuário
 

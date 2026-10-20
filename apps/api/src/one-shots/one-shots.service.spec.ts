@@ -6,6 +6,10 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { TableActorsService } from '../tables/table-actors.service';
 import { OneShotsService } from './one-shots.service';
+import {
+  TableRulesService,
+  TABLE_RULE_WINDOW_MS,
+} from '../tables/table-rules.service';
 
 describe('OneShotsService', () => {
   type RepositoryMethod = (args: unknown) => Promise<unknown>;
@@ -20,8 +24,10 @@ describe('OneShotsService', () => {
     count: jest.fn<RepositoryMethod>(),
   };
   const runTransaction = jest.fn<TransactionRunner>();
+  const sessionRepository = { update: jest.fn<RepositoryMethod>() };
   const prisma = {
     oneShot: oneShotRepository,
+    session: sessionRepository,
     $transaction: runTransaction,
   } as unknown as PrismaService;
   const actorMethods = {
@@ -34,6 +40,7 @@ describe('OneShotsService', () => {
   const service = new OneShotsService(
     prisma,
     actorMethods as unknown as TableActorsService,
+    new TableRulesService(prisma),
   );
 
   const futureDate = new Date(Date.now() + 86_400_000);
@@ -74,6 +81,10 @@ describe('OneShotsService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    oneShotRepository.count.mockResolvedValue(0);
+    runTransaction.mockImplementation(async (operation: unknown) =>
+      (operation as (client: PrismaService) => Promise<unknown>)(prisma),
+    );
     actorMethods.assertMaster.mockResolvedValue();
     actorMethods.assertAdministrator.mockResolvedValue();
     actorMethods.assertCanManage.mockResolvedValue();
@@ -102,6 +113,9 @@ describe('OneShotsService', () => {
     expect(createInput.data.session.create).toMatchObject({
       campaignId: null,
       scheduledAt: futureDate,
+    });
+    expect(runTransaction).toHaveBeenCalledWith(expect.any(Function), {
+      isolationLevel: 'Serializable',
     });
   });
 
@@ -172,12 +186,11 @@ describe('OneShotsService', () => {
     await service.update('one-shot-1', 'master-1', {
       session: {
         title: ' Novo título ',
-        scheduledAt: futureDate.toISOString(),
       },
     });
     expect(transaction.session.update).toHaveBeenCalledWith({
       where: { id: 'session-1' },
-      data: { title: 'Novo título', scheduledAt: futureDate },
+      data: { title: 'Novo título' },
     });
     expect(transaction.oneShot.update).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -291,5 +304,260 @@ describe('OneShotsService', () => {
     ).rejects.toMatchObject({
       response: { code: 'ONE_SHOT_DELETE_NOT_ALLOWED' },
     });
+  });
+
+  it.each([0, 1, 2, 3, 4])(
+    'allows creation with %i registered one-shots in the bucket',
+    async (count) => {
+      oneShotRepository.count.mockResolvedValue(count);
+      await service.create('master-2', {
+        gameSystemId: 'system-1',
+        title: 'Nova mesa',
+        session: { scheduledAt: futureDate.toISOString() },
+      });
+      expect(oneShotRepository.create).toHaveBeenCalled();
+      const query = oneShotRepository.count.mock.calls[0][0];
+      expect(query).toEqual({
+        where: {
+          gameSystemId: 'system-1',
+          session: {
+            is: {
+              scheduledAt: new TableRulesService(prisma).oneShotMonth(
+                futureDate,
+              ),
+            },
+          },
+        },
+      });
+      // Exact query has neither masterId nor status: all masters and all states count.
+    },
+  );
+
+  it('rejects a sixth record without writing', async () => {
+    oneShotRepository.count.mockResolvedValue(5);
+    await expect(
+      service.create('master-2', {
+        gameSystemId: 'system-1',
+        title: 'Sexta',
+        session: { scheduledAt: futureDate.toISOString() },
+      }),
+    ).rejects.toMatchObject({
+      response: { code: 'ONE_SHOT_MONTHLY_LIMIT_REACHED' },
+    });
+    expect(oneShotRepository.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects creation beyond 30 days before counting or writing', async () => {
+    await expect(
+      service.create('master-1', {
+        gameSystemId: 'system-1',
+        title: 'Distante',
+        session: {
+          scheduledAt: new Date(
+            Date.now() + TABLE_RULE_WINDOW_MS + 60_000,
+          ).toISOString(),
+        },
+      }),
+    ).rejects.toMatchObject({
+      response: { code: 'ONE_SHOT_SCHEDULE_TOO_FAR' },
+    });
+    expect(oneShotRepository.count).not.toHaveBeenCalled();
+    expect(oneShotRepository.create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { gameSystemId: 'system-2' },
+    { session: { scheduledAt: futureDate.toISOString() } },
+  ])('requires administrative correction for %j', async (dto) => {
+    oneShotRepository.findUnique.mockResolvedValue(oneShot);
+    await expect(
+      service.update('one-shot-1', 'master-1', dto),
+    ).rejects.toMatchObject({
+      response: { code: 'ONE_SHOT_ADMIN_CORRECTION_REQUIRED' },
+    });
+    expect(oneShotRepository.update).not.toHaveBeenCalled();
+    expect(sessionRepository.update).not.toHaveBeenCalled();
+    expect(runTransaction).not.toHaveBeenCalled();
+  });
+
+  it('allows normal title and description updates and resets approval', async () => {
+    oneShotRepository.findUnique.mockResolvedValue(oneShot);
+    await service.update('one-shot-1', 'master-1', {
+      title: ' Novo título ',
+      description: 'Descrição',
+    });
+    expect(oneShotRepository.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          title: 'Novo título',
+          description: 'Descrição',
+          approvalStatus: ApprovalStatus.PENDING,
+        }),
+      }),
+    );
+  });
+
+  it('corrects the aggregate atomically, excluding itself and removing approval/publication', async () => {
+    oneShotRepository.findUnique.mockResolvedValue({
+      ...oneShot,
+      status: OneShotStatus.SCHEDULED,
+      approvalStatus: ApprovalStatus.APPROVED,
+    });
+    oneShotRepository.count.mockResolvedValue(4);
+    await service.correct('one-shot-1', 'admin-1', {
+      gameSystemId: 'system-2',
+      scheduledAt: futureDate.toISOString(),
+    });
+    expect(actorMethods.assertAdministrator).toHaveBeenCalledWith('admin-1');
+    expect(actorMethods.assertActiveGameSystem).toHaveBeenCalledWith(
+      'system-2',
+    );
+    expect(oneShotRepository.count).toHaveBeenCalledWith({
+      where: {
+        gameSystemId: 'system-2',
+        id: { not: 'one-shot-1' },
+        session: {
+          is: {
+            scheduledAt: new TableRulesService(prisma).oneShotMonth(futureDate),
+          },
+        },
+      },
+    });
+    expect(sessionRepository.update).toHaveBeenCalledWith({
+      where: { id: 'session-1' },
+      data: { scheduledAt: futureDate },
+    });
+    expect(oneShotRepository.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: {
+          gameSystemId: 'system-2',
+          approvalStatus: ApprovalStatus.PENDING,
+          reviewedById: null,
+          reviewedAt: null,
+          reviewNote: null,
+          status: OneShotStatus.DRAFT,
+        },
+      }),
+    );
+    expect(runTransaction).toHaveBeenCalledWith(expect.any(Function), {
+      isolationLevel: 'Serializable',
+    });
+  });
+
+  it('does not allow administrators to correct into a full bucket', async () => {
+    oneShotRepository.findUnique.mockResolvedValue(oneShot);
+    oneShotRepository.count.mockResolvedValue(5);
+    await expect(
+      service.correct('one-shot-1', 'admin-1', { gameSystemId: 'system-2' }),
+    ).rejects.toMatchObject({
+      response: { code: 'ONE_SHOT_MONTHLY_LIMIT_REACHED' },
+    });
+    expect(sessionRepository.update).not.toHaveBeenCalled();
+    expect(oneShotRepository.update).not.toHaveBeenCalled();
+  });
+
+  it('does not allow administrators to correct beyond 30 days', async () => {
+    oneShotRepository.findUnique.mockResolvedValue(oneShot);
+    await expect(
+      service.correct('one-shot-1', 'admin-1', {
+        scheduledAt: new Date(
+          Date.now() + TABLE_RULE_WINDOW_MS + 60_000,
+        ).toISOString(),
+      }),
+    ).rejects.toMatchObject({
+      response: { code: 'ONE_SHOT_SCHEDULE_TOO_FAR' },
+    });
+    expect(sessionRepository.update).not.toHaveBeenCalled();
+    expect(oneShotRepository.update).not.toHaveBeenCalled();
+  });
+
+  it.each([OneShotStatus.CANCELLED, OneShotStatus.COMPLETED])(
+    'does not correct closed %s one-shots',
+    async (status) => {
+      oneShotRepository.findUnique.mockResolvedValue({ ...oneShot, status });
+      await expect(
+        service.correct('one-shot-1', 'admin-1', { gameSystemId: 'system-2' }),
+      ).rejects.toMatchObject({ response: { code: 'ONE_SHOT_CLOSED' } });
+      expect(oneShotRepository.count).not.toHaveBeenCalled();
+      expect(sessionRepository.update).not.toHaveBeenCalled();
+      expect(oneShotRepository.update).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects empty correction', async () => {
+    await expect(
+      service.correct('one-shot-1', 'admin-1', {}),
+    ).rejects.toMatchObject({
+      response: { code: 'ONE_SHOT_CORRECTION_EMPTY' },
+    });
+    expect(runTransaction).not.toHaveBeenCalled();
+  });
+
+  it('creates a one-shot exactly at the 30-day scheduling limit', async () => {
+    const now = new Date('2026-10-20T12:00:00Z');
+    jest.useFakeTimers({ now });
+    try {
+      const scheduledAt = new Date(now.getTime() + TABLE_RULE_WINDOW_MS);
+      await service.create('master-1', {
+        gameSystemId: 'system-1',
+        title: 'No limite',
+        session: { scheduledAt: scheduledAt.toISOString() },
+      });
+      expect(oneShotRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            session: { create: { campaignId: null, title: null, scheduledAt } },
+          }),
+        }),
+      );
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it.each([
+    { gameSystemId: 'system-2' },
+    { scheduledAt: futureDate.toISOString() },
+  ])(
+    'corrects a single structural field %j and revalidates the effective system/date',
+    async (dto) => {
+      oneShotRepository.findUnique.mockResolvedValue(oneShot);
+      await service.correct('one-shot-1', 'admin-1', dto);
+      expect(actorMethods.assertActiveGameSystem).toHaveBeenCalledWith(
+        dto.gameSystemId ?? oneShot.gameSystemId,
+      );
+      expect(sessionRepository.update).toHaveBeenCalledWith({
+        where: { id: 'session-1' },
+        data: { scheduledAt: futureDate },
+      });
+      expect(oneShotRepository.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            gameSystemId: dto.gameSystemId ?? oneShot.gameSystemId,
+            approvalStatus: ApprovalStatus.PENDING,
+          }),
+        }),
+      );
+    },
+  );
+
+  it('publishes an approved one-shot with a future session', async () => {
+    oneShotRepository.findUnique.mockResolvedValue({
+      ...oneShot,
+      approvalStatus: ApprovalStatus.APPROVED,
+    });
+    await service.publish('one-shot-1', 'master-1');
+    expect(oneShotRepository.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { status: OneShotStatus.SCHEDULED } }),
+    );
+  });
+
+  it('rejects a non-administrator before accessing the aggregate', async () => {
+    actorMethods.assertAdministrator.mockRejectedValueOnce(new Error('denied'));
+    await expect(
+      service.correct('one-shot-1', 'master-1', { gameSystemId: 'system-2' }),
+    ).rejects.toThrow('denied');
+    expect(runTransaction).not.toHaveBeenCalled();
+    expect(oneShotRepository.findUnique).not.toHaveBeenCalled();
   });
 });

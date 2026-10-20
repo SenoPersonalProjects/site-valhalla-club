@@ -4,6 +4,7 @@ import { ApprovalStatus, CampaignStatus } from '../generated/prisma/enums';
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { TableActorsService } from '../tables/table-actors.service';
+import { TableRulesService } from '../tables/table-rules.service';
 import { badRequest, conflict, notFound } from '../tables/table-domain.errors';
 import { ChangeCampaignStatusDto } from './dto/change-campaign-status.dto';
 import { CreateCampaignDto } from './dto/create-campaign.dto';
@@ -47,6 +48,7 @@ export class CampaignsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly actors: TableActorsService,
+    private readonly rules: TableRulesService,
   ) {}
 
   async create(actorId: string, dto: CreateCampaignDto) {
@@ -183,27 +185,34 @@ export class CampaignsService {
   }
 
   async publish(id: string, actorId: string) {
-    const campaign = await this.getByIdOrThrow(id);
-    await this.actors.assertCanManage(campaign.masterId, actorId);
+    return this.rules.serializable(async (transaction) => {
+      const campaign = await this.getByIdOrThrow(id, transaction);
+      await this.actors.assertCanManage(campaign.masterId, actorId);
 
-    if (campaign.approvalStatus !== ApprovalStatus.APPROVED) {
-      throw conflict(
-        'CAMPAIGN_NOT_APPROVED',
-        'A campanha precisa ser aprovada antes da publicação',
+      if (campaign.approvalStatus !== ApprovalStatus.APPROVED) {
+        throw conflict(
+          'CAMPAIGN_NOT_APPROVED',
+          'A campanha precisa ser aprovada antes da publicação',
+        );
+      }
+
+      if (campaign.status === CampaignStatus.ARCHIVED) {
+        throw conflict(
+          'CAMPAIGN_ARCHIVED',
+          'Uma campanha arquivada não pode ser publicada',
+        );
+      }
+
+      await this.rules.assertCampaignCapacity(
+        transaction,
+        campaign.masterId,
+        id,
       );
-    }
-
-    if (campaign.status === CampaignStatus.ARCHIVED) {
-      throw conflict(
-        'CAMPAIGN_ARCHIVED',
-        'Uma campanha arquivada não pode ser publicada',
-      );
-    }
-
-    return this.prisma.campaign.update({
-      where: { id },
-      data: { status: CampaignStatus.ACTIVE },
-      include: campaignDetails,
+      return transaction.campaign.update({
+        where: { id },
+        data: { status: CampaignStatus.ACTIVE },
+        include: campaignDetails,
+      });
     });
   }
 
@@ -279,8 +288,11 @@ export class CampaignsService {
     });
   }
 
-  private async getByIdOrThrow(id: string) {
-    const campaign = await this.prisma.campaign.findUnique({
+  private async getByIdOrThrow(
+    id: string,
+    client: Prisma.TransactionClient = this.prisma,
+  ) {
+    const campaign = await client.campaign.findUnique({
       where: { id },
       include: campaignDetails,
     });

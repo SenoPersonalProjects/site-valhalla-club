@@ -17,6 +17,49 @@ acessíveis normalmente. A landing pública do MVP não depende desta API em run
 
 Consulte a [documentação de campanhas, sessões e one-shots](../../docs/api/tables-domain.md).
 
+## Regras operacionais de mesas
+
+`TableRulesService` centraliza as quotas e o calendário da tarefa `86e39wje2`:
+
+- máximo de 2 campanhas ACTIVE por mestre, validado na publicação com aprovação
+  inicial; DRAFTs não contam, a própria campanha é excluída na republicação e
+  administradores não bypassam o limite;
+- sessões posteriores de Campaign não removem aprovação; alteração de conteúdo
+  continua removendo aprovação e exposição pública quando aplicável;
+- máximo global de 5 one-shots por sistema/mês de `Session.scheduledAt` em
+  America/Maceio, com limites do mês convertidos para UTC;
+- todos os estados contam, inclusive DRAFT, CANCELLED e COMPLETED; cancelar não
+  libera quota, exclusão legítima de DRAFT sem histórico libera;
+- agendamento de one-shot deve ser futuro e no máximo 30 × 24 horas adiante,
+  incluindo o limite exato; sessões de Campaign não recebem essa janela;
+- PATCH comum de one-shot altera apenas conteúdo. Sistema/data exigem
+  `PATCH /admin/one-shots/:id/correction`, com ADMIN/DEV de sistema APPROVED,
+  sem privilégio por ClubRole.ADMIN e sem bypass de quota/janela;
+- correção atualiza OneShot + Session atomicamente, exclui o próprio registro
+  da contagem, reseta aprovação e devolve SCHEDULED a DRAFT. CANCELLED/COMPLETED
+  não podem ser corrigidos.
+
+Publicação de Campaign, criação e correção estrutural de OneShot usam transações
+Prisma Serializable, com até três tentativas completas em conflito `P2034`.
+Erros novos: `CAMPAIGN_ACTIVE_LIMIT_REACHED`, `ONE_SHOT_MONTHLY_LIMIT_REACHED`,
+`ONE_SHOT_SCHEDULE_TOO_FAR`, `ONE_SHOT_ADMIN_CORRECTION_REQUIRED`,
+`ONE_SHOT_CORRECTION_EMPTY` e `TABLE_CONCURRENT_CHANGE`. Contratos e HTTP estão
+no [guia de domínio](../../docs/api/tables-domain.md#concorrência-e-erros-operacionais).
+
+`CampaignInactivityService` reconcilia no startup e a cada hora pelo scheduler
+oficial `@nestjs/schedule` 6.1.3. Usa `updateMany` para ACTIVE → INACTIVE se
+`updatedAt < agora - 30 dias` e não existe sessão não CANCELLED com data igual
+ou posterior ao cutoff. `updatedAt` dá baseline a publicações sem sessões;
+sessões recentes/futuras mantêm atividade. É idempotente, não altera outros
+estados e não introduz escrita em GET. Ambientes que dormem fazem catch-up ao
+reiniciar; falhas são logadas sem secrets e tentadas novamente no próximo ciclo.
+Não depende de cron do sistema operacional.
+
+As regras permanecem em NestJS/Prisma, sem mudança de schema/migrations ou SQL
+específico. Testes de concorrência usam doubles de transações; a validação de
+isolamento e desempenho em PostgreSQL/MySQL reais continua sendo revisão de
+integração antes de produção, sem criar banco real nesta tarefa.
+
 A arquitetura temporária de desenvolvimento/homologação usa frontend Vercel,
 API NestJS no Render Free e PostgreSQL hospedado no Supabase Free. Prisma 7 está
 integrado; a migration inicial da Fase 2 está aplicada em homologação. Logging

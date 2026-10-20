@@ -6,11 +6,17 @@ import {
   CampaignsController,
 } from './campaigns.controller';
 import { CampaignsService } from './campaigns.service';
+import { CampaignInactivityService } from './campaign-inactivity.service';
+import { StructuredLoggerService } from '../observability/structured-logger.service';
 
 @Module({
   imports: [PrismaModule, TablesModule],
   controllers: [CampaignsController, AdminCampaignsController],
-  providers: [CampaignsService],
+  providers: [
+    CampaignsService,
+    CampaignInactivityService,
+    StructuredLoggerService,
+  ],
   exports: [CampaignsService],
 })
 export class CampaignsModule {}

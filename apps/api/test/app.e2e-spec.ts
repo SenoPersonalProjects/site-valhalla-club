@@ -15,6 +15,13 @@ import { AppModule } from './../src/app.module';
 import { StructuredLoggerService } from './../src/observability/structured-logger.service';
 import { PrismaService } from './../src/prisma/prisma.service';
 import { CurrentUserId } from './../src/common/http/current-user-id.decorator';
+import { SchedulerRegistry } from '@nestjs/schedule';
+import {
+  AccountStatus,
+  SystemRole,
+  ClubRole,
+  OneShotStatus,
+} from './../src/generated/prisma/enums';
 
 @Controller('__test/context')
 class UserContextTestController {
@@ -67,6 +74,9 @@ class ObservabilityTestController {
 describe('AppController (e2e)', () => {
   let app: INestApplication<App>;
   let trustedUser: { id?: unknown } | undefined;
+  const userRepository = { findUnique: jest.fn() };
+  const oneShotRepository = { findUnique: jest.fn(), update: jest.fn() };
+  const sessionRepository = { update: jest.fn() };
   let structuredLogger: {
     info: jest.MockedFunction<LogMethod>;
     warn: jest.MockedFunction<LogMethod>;
@@ -75,12 +85,48 @@ describe('AppController (e2e)', () => {
 
   beforeEach(async () => {
     trustedUser = undefined;
+    userRepository.findUnique.mockReset();
+    oneShotRepository.findUnique.mockReset().mockResolvedValue({
+      id: 'one-shot-1',
+      masterId: 'master-1',
+      gameSystemId: 'system-1',
+      status: OneShotStatus.SCHEDULED,
+      session: {
+        id: 'session-1',
+        scheduledAt: new Date(Date.now() + 86_400_000),
+      },
+    });
+    oneShotRepository.update
+      .mockReset()
+      .mockResolvedValue({ id: 'one-shot-1' });
+    sessionRepository.update.mockReset().mockResolvedValue({ id: 'session-1' });
     structuredLogger = {
       info: jest.fn<LogMethod>(),
       warn: jest.fn<LogMethod>(),
       error: jest.fn<LogMethod>(),
     };
 
+    const prismaMock = {
+      onModuleInit: jest.fn(),
+      onModuleDestroy: jest.fn(),
+      user: userRepository,
+      gameSystem: { findUnique: jest.fn().mockResolvedValue({ active: true }) },
+      session: sessionRepository,
+      campaign: {
+        findMany: jest.fn().mockResolvedValue([]),
+        count: jest.fn().mockResolvedValue(0),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      oneShot: {
+        ...oneShotRepository,
+        findMany: jest.fn().mockResolvedValue([]),
+        count: jest.fn().mockResolvedValue(0),
+      },
+      $transaction: async (operation: unknown): Promise<unknown> =>
+        typeof operation === 'function'
+          ? (operation as (client: unknown) => Promise<unknown>)(prismaMock)
+          : Promise.all(operation as Promise<unknown>[]),
+    };
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
       controllers: [
@@ -90,20 +136,7 @@ describe('AppController (e2e)', () => {
       ],
     })
       .overrideProvider(PrismaService)
-      .useValue({
-        onModuleInit: jest.fn(),
-        onModuleDestroy: jest.fn(),
-        campaign: {
-          findMany: jest.fn().mockResolvedValue([]),
-          count: jest.fn().mockResolvedValue(0),
-        },
-        oneShot: {
-          findMany: jest.fn().mockResolvedValue([]),
-          count: jest.fn().mockResolvedValue(0),
-        },
-        $transaction: (operations: Promise<unknown>[]) =>
-          Promise.all(operations),
-      })
+      .useValue(prismaMock)
       .overrideProvider(StructuredLoggerService)
       .useValue(structuredLogger)
       .compile();
@@ -121,6 +154,7 @@ describe('AppController (e2e)', () => {
       },
     );
     await app.init();
+    structuredLogger.info.mockClear();
   });
 
   it('/ (GET)', () => {
@@ -128,6 +162,16 @@ describe('AppController (e2e)', () => {
       .get('/')
       .expect(200)
       .expect('Hello World!');
+  });
+
+  it('reconciles on startup and registers periodic reconciliation with Nest scheduling', () => {
+    const prisma = app.get(PrismaService) as unknown as {
+      campaign: { updateMany: jest.Mock };
+    };
+    expect(prisma.campaign.updateMany).toHaveBeenCalledTimes(1);
+    expect(
+      app.get(SchedulerRegistry).getInterval('campaign-inactivity'),
+    ).toBeDefined();
   });
 
   it('requires a user context on private table routes', async () => {
@@ -139,6 +183,81 @@ describe('AppController (e2e)', () => {
       statusCode: 401,
       code: 'USER_CONTEXT_REQUIRED',
     });
+  });
+
+  it('does not authenticate administrative correction with x-user-id', async () => {
+    const response = await request(app.getHttpServer())
+      .patch('/admin/one-shots/one-shot-1/correction')
+      .set('x-user-id', 'admin-1')
+      .send({ gameSystemId: 'system-2' })
+      .expect(401);
+    expect(readResponseBody(response)).toMatchObject({
+      code: 'USER_CONTEXT_REQUIRED',
+    });
+    expect(oneShotRepository.update).not.toHaveBeenCalled();
+  });
+
+  it.each([SystemRole.ADMIN, SystemRole.DEV])(
+    'allows approved %s administrative correction',
+    async (systemRole) => {
+      trustedUser = { id: 'admin-1' };
+      userRepository.findUnique.mockResolvedValue({
+        status: AccountStatus.APPROVED,
+        systemRole,
+      });
+      await request(app.getHttpServer())
+        .patch('/admin/one-shots/one-shot-1/correction')
+        .send({ gameSystemId: 'system-2' })
+        .expect(200)
+        .expect({ id: 'one-shot-1' });
+      expect(oneShotRepository.update).toHaveBeenCalled();
+      expect(sessionRepository.update).toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    {
+      status: AccountStatus.APPROVED,
+      systemRole: SystemRole.USER,
+      clubRoles: [{ role: ClubRole.ADMIN }],
+    },
+    {
+      status: AccountStatus.APPROVED,
+      systemRole: SystemRole.USER,
+      clubRoles: [{ role: ClubRole.MASTER }],
+    },
+    ...[SystemRole.ADMIN, SystemRole.DEV].flatMap((systemRole) =>
+      Object.values(AccountStatus)
+        .filter((status) => status !== AccountStatus.APPROVED)
+        .map((status) => ({ status, systemRole })),
+    ),
+  ])('rejects unauthorized correction context %j', async (user) => {
+    trustedUser = { id: 'actor-1' };
+    userRepository.findUnique.mockResolvedValue(user);
+    const response = await request(app.getHttpServer())
+      .patch('/admin/one-shots/one-shot-1/correction')
+      .send({ gameSystemId: 'system-2' })
+      .expect(403);
+    expect(readResponseBody(response)).toMatchObject({
+      code: 'ADMIN_ROLE_REQUIRED',
+    });
+    expect(oneShotRepository.findUnique).not.toHaveBeenCalled();
+    expect(oneShotRepository.update).not.toHaveBeenCalled();
+    expect(sessionRepository.update).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { title: 'not structural' },
+    { scheduledAt: null },
+    { gameSystemId: null },
+    { scheduledAt: 'invalid' },
+  ])('validates administrative correction input %j', async (body) => {
+    trustedUser = { id: 'admin-1' };
+    await request(app.getHttpServer())
+      .patch('/admin/one-shots/one-shot-1/correction')
+      .send(body)
+      .expect(400);
+    expect(oneShotRepository.update).not.toHaveBeenCalled();
   });
 
   it.each([

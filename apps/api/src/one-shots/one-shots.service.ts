@@ -8,6 +8,8 @@ import {
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { TableActorsService } from '../tables/table-actors.service';
+import { TableRulesService } from '../tables/table-rules.service';
+import { CorrectOneShotDto } from './dto/correct-one-shot.dto';
 import { badRequest, conflict, notFound } from '../tables/table-domain.errors';
 import { ChangeOneShotStatusDto } from './dto/change-one-shot-status.dto';
 import { CreateOneShotDto } from './dto/create-one-shot.dto';
@@ -53,6 +55,7 @@ export class OneShotsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly actors: TableActorsService,
+    private readonly rules: TableRulesService,
   ) {}
 
   async create(actorId: string, dto: CreateOneShotDto) {
@@ -61,21 +64,29 @@ export class OneShotsService {
       this.actors.assertActiveGameSystem(dto.gameSystemId),
     ]);
 
-    return this.prisma.oneShot.create({
-      data: {
-        masterId: actorId,
-        gameSystemId: dto.gameSystemId,
-        title: this.normalizeRequiredText(dto.title),
-        description: this.normalizeOptionalText(dto.description),
-        session: {
-          create: {
-            campaignId: null,
-            title: this.normalizeOptionalText(dto.session.title),
-            scheduledAt: this.parseFutureDate(dto.session.scheduledAt),
+    return this.rules.serializable(async (transaction) => {
+      const scheduledAt = this.rules.parseOneShotDate(dto.session.scheduledAt);
+      await this.rules.assertOneShotCapacity(
+        transaction,
+        dto.gameSystemId,
+        scheduledAt,
+      );
+      return transaction.oneShot.create({
+        data: {
+          masterId: actorId,
+          gameSystemId: dto.gameSystemId,
+          title: this.normalizeRequiredText(dto.title),
+          description: this.normalizeOptionalText(dto.description),
+          session: {
+            create: {
+              campaignId: null,
+              title: this.normalizeOptionalText(dto.session.title),
+              scheduledAt,
+            },
           },
         },
-      },
-      include: oneShotPrivateDetails,
+        include: oneShotPrivateDetails,
+      });
     });
   }
 
@@ -119,6 +130,16 @@ export class OneShotsService {
     await this.actors.assertCanManage(oneShot.masterId, actorId);
 
     if (
+      dto.gameSystemId !== undefined ||
+      dto.session?.scheduledAt !== undefined
+    ) {
+      throw conflict(
+        'ONE_SHOT_ADMIN_CORRECTION_REQUIRED',
+        'Sistema e data exigem correção administrativa do one-shot',
+      );
+    }
+
+    if (
       oneShot.status === OneShotStatus.CANCELLED ||
       oneShot.status === OneShotStatus.COMPLETED
     ) {
@@ -135,10 +156,6 @@ export class OneShotsService {
       );
     }
 
-    if (dto.gameSystemId) {
-      await this.actors.assertActiveGameSystem(dto.gameSystemId);
-    }
-
     if (!oneShot.session) {
       throw conflict(
         'ONE_SHOT_WITHOUT_SESSION',
@@ -150,11 +167,6 @@ export class OneShotsService {
       ? {
           ...(dto.session.title !== undefined
             ? { title: this.normalizeOptionalText(dto.session.title) }
-            : {}),
-          ...(dto.session.scheduledAt
-            ? {
-                scheduledAt: this.parseFutureDate(dto.session.scheduledAt),
-              }
             : {}),
         }
       : undefined;
@@ -170,7 +182,6 @@ export class OneShotsService {
       return transaction.oneShot.update({
         where: { id },
         data: {
-          ...(dto.gameSystemId ? { gameSystemId: dto.gameSystemId } : {}),
           ...(dto.title
             ? { title: this.normalizeRequiredText(dto.title) }
             : {}),
@@ -215,6 +226,63 @@ export class OneShotsService {
     await this.prisma.$transaction(async (transaction) => {
       await transaction.session.delete({ where: { id: oneShot.session!.id } });
       await transaction.oneShot.delete({ where: { id } });
+    });
+  }
+
+  async correct(id: string, actorId: string, dto: CorrectOneShotDto) {
+    await this.actors.assertAdministrator(actorId);
+    if (dto.gameSystemId === undefined && dto.scheduledAt === undefined) {
+      throw badRequest(
+        'ONE_SHOT_CORRECTION_EMPTY',
+        'Informe sistema ou data para a correção administrativa',
+      );
+    }
+    return this.rules.serializable(async (transaction) => {
+      const oneShot = await this.getByIdOrThrow(id, transaction);
+      if (
+        oneShot.status === OneShotStatus.CANCELLED ||
+        oneShot.status === OneShotStatus.COMPLETED
+      ) {
+        throw conflict(
+          'ONE_SHOT_CLOSED',
+          'One-shots cancelados ou concluídos não podem ser corrigidos',
+        );
+      }
+      if (!oneShot.session) {
+        throw conflict(
+          'ONE_SHOT_WITHOUT_SESSION',
+          'O one-shot não possui a sessão obrigatória',
+        );
+      }
+      const gameSystemId = dto.gameSystemId ?? oneShot.gameSystemId;
+      await this.actors.assertActiveGameSystem(gameSystemId);
+      const scheduledAt = this.rules.parseOneShotDate(
+        dto.scheduledAt ?? oneShot.session.scheduledAt.toISOString(),
+      );
+      await this.rules.assertOneShotCapacity(
+        transaction,
+        gameSystemId,
+        scheduledAt,
+        id,
+      );
+      await transaction.session.update({
+        where: { id: oneShot.session.id },
+        data: { scheduledAt },
+      });
+      return transaction.oneShot.update({
+        where: { id },
+        data: {
+          gameSystemId,
+          approvalStatus: ApprovalStatus.PENDING,
+          reviewedById: null,
+          reviewedAt: null,
+          reviewNote: null,
+          ...(oneShot.status === OneShotStatus.SCHEDULED
+            ? { status: OneShotStatus.DRAFT }
+            : {}),
+        },
+        include: oneShotPrivateDetails,
+      });
     });
   }
 
@@ -371,8 +439,11 @@ export class OneShotsService {
     });
   }
 
-  private async getByIdOrThrow(id: string) {
-    const oneShot = await this.prisma.oneShot.findUnique({
+  private async getByIdOrThrow(
+    id: string,
+    client: Prisma.TransactionClient = this.prisma,
+  ) {
+    const oneShot = await client.oneShot.findUnique({
       where: { id },
       include: oneShotPrivateDetails,
     });
@@ -398,18 +469,6 @@ export class OneShotsService {
       (dto.session.title !== undefined ||
         dto.session.scheduledAt !== undefined),
     );
-  }
-
-  private parseFutureDate(value: string): Date {
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime()) || date <= new Date()) {
-      throw badRequest(
-        'SESSION_DATE_MUST_BE_FUTURE',
-        'A data da sessão precisa estar no futuro',
-      );
-    }
-
-    return date;
   }
 
   private normalizeOptionalText(value?: string | null): string | null {
