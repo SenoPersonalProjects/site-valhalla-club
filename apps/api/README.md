@@ -1,10 +1,21 @@
 # API — Site Valhalla Club
 
-API NestJS 11 com a camada de acesso a dados preparada em Prisma ORM.
+API NestJS 11 com acesso a dados por Prisma ORM e o domínio inicial de mesas da
+Fase 2.
 
 ## Estado atual
 
-Existem somente as rotas `GET /` e `GET /health`. O Prisma está integrado ao ciclo de vida do NestJS e configurado para PostgreSQL, mas ainda não há modelos de domínio nem migrations. Também não há autenticação, JWT funcional, usuários, mesas ou pagamentos. A landing pública do MVP não depende desta API em runtime.
+Além das rotas `GET /` e `GET /health`, a API implementa campanhas, sessões,
+one-shots, consulta das mesas do usuário, aprovação administrativa e publicação.
+O schema inicial e sua migration estão versionados. Ainda não há autenticação ou
+JWT funcional. Rotas privadas exigem `request.user.id`, contrato da futura
+infraestrutura confiável de autenticação. Sem esse contexto, falham fechadas com
+`401 USER_CONTEXT_REQUIRED`, inclusive quando o cliente envia apenas `x-user-id`.
+Nenhum header arbitrário é tratado como identidade e nenhum código de produção
+fabrica `request.user` a partir de dados do cliente. As rotas públicas continuam
+acessíveis normalmente. A landing pública do MVP não depende desta API em runtime.
+
+Consulte a [documentação de campanhas, sessões e one-shots](../../docs/api/tables-domain.md).
 
 ## Scripts
 

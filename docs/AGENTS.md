@@ -20,7 +20,7 @@ O modelo atual permite atuação fullstack. Não atribuir à equipe pessoas ou c
 - `apps/web`: Next.js 16, React 19, TypeScript, Tailwind CSS 4, App Router e Embla Carousel;
 - `apps/api`: NestJS 11, TypeScript e Prisma ORM, com base e health check;
 - PostgreSQL: banco definido para homologação;
-- Prisma ORM: camada integrada à API, ainda sem modelos de domínio ou migrations.
+- Prisma ORM: camada integrada à API, com schema e migration inicial da Fase 2.
 
 Componentes atuais da landing incluem `Header`, `HeroSection`, `AboutSection`, `NewsSection`, `EventCarousel`, `TablesSection`, `TableCard`, `TeamSection`, `Footer`, `SectionHeader` e `HorizontalCarousel`.
 
@@ -60,9 +60,21 @@ Tipos de commit: `feat`, `fix`, `docs`, `chore`, `style`, `refactor` e `test`.
 
 ## Back-end e banco
 
-A API atual possui a base NestJS, as rotas `/` e `/health` e a infraestrutura Prisma. Não documentar ou tratar login, JWT, usuários, mesas, pagamentos ou modelos de domínio como implementados.
+A API possui a base NestJS, observabilidade, Prisma e o domínio de campanhas,
+sessões e one-shots. A autenticação e o JWT ainda não estão implementados. Até
+essa integração, as rotas privadas falham fechadas com `401 USER_CONTEXT_REQUIRED`.
+`request.user.id` é o contrato esperado da futura infraestrutura confiável de
+autenticação. Nenhum header arbitrário, incluindo `x-user-id`, é tratado como
+identidade. Não criar fallback de produção que fabrique `request.user` com dados
+do cliente. Rotas públicas continuam acessíveis normalmente; contexto simulado
+de autenticação pertence exclusivamente ao código de teste.
 
-PostgreSQL e Prisma ORM são as decisões atuais para homologação. Schema e migrations deverão ser versionados quando os primeiros modelos de domínio forem definidos. Em desenvolvimento, use `prisma migrate dev`; em homologação e produção, aplique somente migrations versionadas com `prisma migrate deploy`. Não use `prisma db push` em produção. Para preservar a portabilidade futura para MySQL, evite tipos nativos, extensões e SQL específicos do PostgreSQL sem decisão arquitetural documentada.
+PostgreSQL e Prisma ORM são as decisões atuais para homologação. Schema e
+migrations são versionados. Em desenvolvimento, use `prisma migrate dev`; em
+homologação e produção, aplique somente migrations versionadas com
+`prisma migrate deploy`. Não use `prisma db push` em produção. Para preservar a
+portabilidade futura para MySQL, evite tipos nativos, extensões e SQL específicos
+do PostgreSQL sem decisão arquitetural documentada.
 
 ## Variáveis de ambiente
 

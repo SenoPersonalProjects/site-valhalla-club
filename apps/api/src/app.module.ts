@@ -3,19 +3,31 @@ import {
   Module,
   NestModule,
   RequestMethod,
+  ValidationPipe,
 } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_FILTER, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { CampaignsModule } from './campaigns/campaigns.module';
+import { OneShotsModule } from './one-shots/one-shots.module';
 import { ApiExceptionFilter } from './observability/api-exception.filter';
 import { HttpLoggingInterceptor } from './observability/http-logging.interceptor';
 import { RequestIdMiddleware } from './observability/request-id.middleware';
 import { StructuredLoggerService } from './observability/structured-logger.service';
 import { PrismaModule } from './prisma/prisma.module';
+import { SessionsModule } from './sessions/sessions.module';
+import { TablesModule } from './tables/tables.module';
 
 @Module({
-  imports: [ConfigModule.forRoot({ isGlobal: true }), PrismaModule],
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
+    PrismaModule,
+    TablesModule,
+    CampaignsModule,
+    SessionsModule,
+    OneShotsModule,
+  ],
   controllers: [AppController],
   providers: [
     AppService,
@@ -27,6 +39,15 @@ import { PrismaModule } from './prisma/prisma.module';
     {
       provide: APP_FILTER,
       useClass: ApiExceptionFilter,
+    },
+    {
+      provide: APP_PIPE,
+      useFactory: () =>
+        new ValidationPipe({
+          transform: true,
+          whitelist: true,
+          forbidNonWhitelisted: true,
+        }),
     },
   ],
 })
