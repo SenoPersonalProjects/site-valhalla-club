@@ -4,7 +4,9 @@ Site institucional do Valhalla Club, comunidade de RPG de mesa de Aracaju, Sergi
 
 ## Estado atual
 
-O MVP institucional está **homologado e em preparação para produção**. A publicação no Netlify ainda não ocorreu.
+O MVP institucional está **publicado na Vercel**:
+[clubevalhalla.vercel.app](https://clubevalhalla.vercel.app/).
+A Fase 2 está em desenvolvimento/homologação, separada da landing pública.
 
 ## MVP implementado
 
@@ -32,6 +34,14 @@ autenticação. Enquanto essa integração não existir, falham fechadas com
 | Banco     | PostgreSQL em homologação, com schema e migration inicial da Fase 2           |
 | Gestão    | GitHub e ClickUp                                                              |
 
+Homologação da Fase 2: frontend Vercel, API NestJS no Render Free e PostgreSQL
+hospedado no Supabase Free. Prisma 7, schema inicial, migration aplicada em
+homologação, logging estruturado/Request ID e domínio base de Campaign, Session
+e OneShot já existem. Auth/JWT e os demais fluxos não estão todos implementados.
+API NestJS e MySQL no Railway são **produção planejada**, condicionada a
+homologação, métricas e validação da migração. Supabase é usado como PostgreSQL
+hospedado, sem adotar Auth ou outros serviços como fundação do domínio.
+
 ## Estrutura
 
 ```text
@@ -50,6 +60,9 @@ No front-end, `SITE_URL` define canonical, Open Graph e JSON-LD. Em produção, 
 
 ## Documentação
 
+Fundamentos da Fase 2: arquitetura (`86e39wfaq`), métricas/capacidade
+(`86e39whgu`), privacidade (`86e39wg1h`) e atualização documental (`86e39wf6c`).
+
 - [MVP: escopo, estado e roadmap](docs/mvp.md)
 - [Setup local](docs/setup-local.md)
 - [Briefing inicial e evolução](docs/briefing.md)
@@ -58,7 +71,11 @@ No front-end, `SITE_URL` define canonical, Open Graph e JSON-LD. Em produção, 
 - [Header e Hero](docs/header-hero-landing.md)
 - [Prisma ORM, PostgreSQL e portabilidade](docs/database/prisma-postgresql-e-portabilidade-mysql.md)
 - [Campanhas, sessões e one-shots](docs/api/tables-domain.md)
-- [Preparação de deploy no Netlify](docs/deploy-netlify.md)
+- [Arquitetura e ambientes da Fase 2](docs/architecture/fase2-ambientes.md)
+- [Métricas e capacidade da Fase 2](docs/observability/metricas-capacidade-fase2.md)
+- [Privacidade e LGPD da Fase 2](docs/privacy/lgpd-fase2.md)
+- [Deploy atual do frontend na Vercel](docs/deploy-vercel.md)
+- [Histórico Netlify — legado não operacional](docs/deploy-netlify.md)
 - [README do front-end](apps/web/README.md)
 - [README da API](apps/api/README.md)
 
@@ -76,8 +93,13 @@ task branch → develop → main
 
 ## Roadmap
 
-**MVP atual:** landing institucional homologada, com conteúdo estático.
+**MVP publicado:** landing institucional com conteúdo estático na Vercel.
 
-**Próxima fase:** autenticação, usuários, perfis de mestres, gerenciamento de mesas, participação de jogadores e calendário.
+**Fase 2 em desenvolvimento/homologação:** autenticação/cadastro/aprovação,
+papéis, perfil, campanhas, sessões, one-shots, participações, feedback, reports,
+advertências, sanções, recursos, administração e audit log. O domínio base de
+mesas já existe; schema não significa que todos esses fluxos estejam entregues.
 
-**Futuro:** mesas pagas, pagamentos, integrações e ferramentas específicas de RPG.
+**Futuro / fora desta etapa:** menores de idade, marketplace de assets/homebrews,
+pagamentos, fórum, galeria, enquetes, Google Calendar e ferramentas avançadas de
+RPG. Detalhamento e estado de implementação: [MVP e Fase 2](docs/mvp.md).

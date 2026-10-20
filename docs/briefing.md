@@ -8,7 +8,10 @@ O Valhalla Club é uma comunidade de RPG de mesa de Aracaju, Sergipe. O projeto 
 
 ## Estado atual
 
-**Entrega 1 / MVP — implementada e homologada:** landing institucional com navegação, Hero, Sobre, Eventos, Mesas rolando, Envolvidos, Contato/Footer, identidade visual, responsividade, SEO básico e acessibilidade básica. O conteúdo atual é estático. A publicação ainda é planejada, não concluída.
+**Entrega 1 / MVP — publicada na Vercel:** landing institucional com navegação,
+Hero, Sobre, Eventos, Mesas rolando, Envolvidos, Contato/Footer, identidade visual,
+responsividade, SEO básico e acessibilidade básica. O conteúdo atual é estático.
+URL pública: [clubevalhalla.vercel.app](https://clubevalhalla.vercel.app/).
 
 Mesas rolando mostra somente mesas vigentes e apresenta estado vazio quando não há dados ativos.
 
@@ -25,7 +28,17 @@ Jogadores e mestres de RPG, pessoas interessadas em conhecer a comunidade, parti
 | Banco | PostgreSQL em homologação; Prisma ORM integrado, com portabilidade futura para MySQL |
 | Gestão | GitHub e ClickUp |
 
-A camada Prisma está integrada à API e configurada para PostgreSQL. O schema ainda não possui modelos de domínio nem migrations; esses artefatos serão adicionados com as regras da próxima fase. A portabilidade para MySQL orienta a modelagem, mas uma troca futura exigirá configuração e histórico de migrations próprios.
+A camada Prisma 7 está integrada à API com provider PostgreSQL, schema inicial
+da Fase 2 e migration inicial aplicada em homologação. Logging estruturado e
+Request ID estão implementados, assim como o domínio base de Campaign, Session
+e OneShot. Autenticação/JWT não está implementada; outros modelos no schema não
+significam fluxos completos disponíveis.
+
+Homologação usa frontend Vercel, API NestJS no Render Free e PostgreSQL hospedado
+no Supabase Free. Produção da Fase 2 com API e MySQL no Railway permanece
+planejamento, condicionado à homologação, métricas e validação de migração.
+Supabase Auth não é a fundação da autenticação; serviços adicionais exigem nova
+decisão. Ver [arquitetura e ambientes](architecture/fase2-ambientes.md).
 
 ## Equipe e responsabilidades
 
@@ -34,9 +47,13 @@ A camada Prisma está integrada à API e configurada para PostgreSQL. O schema a
 | Tech Lead / FullStack | Vinicius Ferreira |
 | FullStack | Charles Matias de Oliveira |
 | FullStack | Gabriel Bomfim Bispo |
+| Design/Figma | Vitor Xavier |
 | Stakeholder | Dan |
 
-O time de desenvolvimento atua no modelo fullstack. O Tech Lead orienta decisões e valida integrações; os desenvolvedores contribuem no front-end e back-end conforme a tarefa; o stakeholder valida prioridades e informações institucionais.
+O time de desenvolvimento atua no modelo fullstack. O Tech Lead orienta decisões
+e valida integrações; desenvolvedores contribuem no front-end e back-end;
+Vitor Xavier responde por Design/Figma; Dan é o stakeholder e valida prioridades
+e informações institucionais.
 
 ## Critérios de sucesso do MVP
 
@@ -44,20 +61,25 @@ O time de desenvolvimento atua no modelo fullstack. O Tech Lead orienta decisõe
 - navegação e contatos funcionais;
 - eventos e envolvidos visíveis;
 - landing responsiva, com SEO e acessibilidade básicos;
-- código e documentação organizados para a preparação de produção.
+- código, documentação e publicação organizados para operação do MVP.
 
 ## Roadmap
 
-### Entrega 2+ — futuro
+### Fase 2 — em desenvolvimento/homologação
 
-- autenticação e cadastro de usuários;
-- perfis de mestre e jogador;
-- CRUD e gerenciamento de mesas;
-- participação de jogadores e calendário.
+- autenticação, cadastro e aprovação;
+- papéis e perfil;
+- campanhas, sessões, one-shots e participações;
+- feedback, reports, advertências, sanções e recursos;
+- administração, audit log e homologação.
 
 ### Evoluções posteriores
 
-- mesas pagas e pagamentos;
-- integrações e ferramentas de RPG.
+- menores de idade;
+- marketplace de assets/homebrews e pagamentos;
+- fórum, galeria e enquetes;
+- Google Calendar e ferramentas avançadas de RPG.
 
-Esses itens não fazem parte do MVP atual e não devem ser descritos como funcionalidades existentes.
+Esses itens não fazem parte do escopo histórico do MVP. A Fase 2 tem entregas
+parciais, discriminadas em [mvp.md](mvp.md); evoluções posteriores permanecem
+fora da etapa atual.

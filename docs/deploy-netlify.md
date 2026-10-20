@@ -1,6 +1,13 @@
-# Preparação de deploy no Netlify
+# LEGADO / NÃO OPERACIONAL — proposta de deploy no Netlify
 
-Este documento registra a configuração confirmada para a publicação planejada do MVP. O MVP ainda não está publicado.
+Este documento preserva a proposta histórica de deploy no Netlify e não deve
+orientar a operação atual. O MVP já está publicado na Vercel, em
+https://clubevalhalla.vercel.app/. Use o [guia atual de deploy](deploy-vercel.md)
+e a [arquitetura da Fase 2](architecture/fase2-ambientes.md).
+
+Todas as instruções abaixo pertencem à proposta antiga, inclusive os passos de
+primeira publicação e pendências de projeto/domínio. Não representam serviços
+ativos nem ações a executar no ambiente atual.
 
 ## Aplicação e repositório
 

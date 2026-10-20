@@ -8,6 +8,12 @@
 - Alterações estruturais: migrations Prisma versionadas.
 - Objetivo futuro: preservar a possibilidade de migração para MySQL.
 
+Homologação usa PostgreSQL hospedado no Supabase Free e API no Render Free.
+API/MySQL no Railway são produção planejada, condicionada a validação e métricas;
+não representam um banco de produção já implantado. Ver
+[arquitetura e ambientes](../architecture/fase2-ambientes.md) e
+[diretrizes detalhadas de portabilidade](portabilidade-postgresql-mysql.md).
+
 Formato da conexão PostgreSQL:
 
 ```env
