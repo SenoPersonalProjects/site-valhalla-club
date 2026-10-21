@@ -11,17 +11,16 @@ O domínio de mesas separa campanhas contínuas de aventuras one-shot:
 
 ## Contexto autenticado
 
-Rotas públicas continuam acessíveis normalmente. Rotas privadas exigem um
-`request.user.id` string não vazia, fornecido exclusivamente por infraestrutura
-confiável de autenticação. Esse é o contrato esperado da futura camada de
-autenticação; autenticação/JWT ainda não foi implementada.
-
-Enquanto a integração não existir, as rotas privadas falham fechadas com
-`401 USER_CONTEXT_REQUIRED`. Nenhum header arbitrário enviado pelo cliente é
-tratado como identidade: enviar somente `x-user-id` também retorna 401.
-Não existe fallback de produção que converta headers, query, body ou cookies
-não validados em `request.user`. Testes podem fornecer contexto por middleware
-exclusivamente de teste, sem derivá-lo da entrada HTTP.
+Rotas públicas continuam acessíveis. Um guard global exige Bearer JWT nas demais
+rotas e preenche `request.user.id` exclusivamente após validar assinatura,
+expiração, tipo de token, `authVersion` e estado APPROVED atual no banco.
+Sem token, retorna `401 AUTH_TOKEN_REQUIRED`; somente `x-user-id` também retorna
+401. `CurrentUserId` continua como defesa adicional (`USER_CONTEXT_REQUIRED`).
+Não existe fallback a partir de headers alternativos, query, body ou cookies.
+Testes E2E de autenticação usam Bearer real; testes isolados de domínio podem
+substituir explicitamente o guard no TestingModule, sem backdoor de produção.
+Ver [cadastro, aprovação e autenticação](auth.md). As regras de autorização de
+mesas abaixo continuam sendo verificadas pelos serviços, com papéis do banco.
 
 ## Regras de acesso
 

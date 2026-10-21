@@ -19,11 +19,11 @@ A Fase 2 está em desenvolvimento/homologação, separada da landing pública.
 
 A landing pública não depende da API em runtime.
 
-As rotas públicas da API continuam acessíveis sem autenticação. Rotas privadas
-exigem `request.user.id`, contrato da futura infraestrutura confiável de
-autenticação. Enquanto essa integração não existir, falham fechadas com
-`401 USER_CONTEXT_REQUIRED`. Nenhum header arbitrário do cliente, incluindo
-`x-user-id`, é tratado como identidade. Autenticação/JWT ainda não foi implementada.
+As rotas públicas da API continuam acessíveis sem autenticação. Cadastro,
+aprovação inicial e JWT estão implementados; rotas privadas exigem Bearer válido
+e estado APPROVED atual no banco. O guard fornece `request.user.id`; `x-user-id`
+não autentica. Logout revoga todos os tokens anteriores por versão de conta.
+Ver [contrato de autenticação](docs/api/auth.md), incluindo configuração obrigatória.
 
 ## Stack
 
@@ -37,7 +37,9 @@ autenticação. Enquanto essa integração não existir, falham fechadas com
 Homologação da Fase 2: frontend Vercel, API NestJS no Render Free e PostgreSQL
 hospedado no Supabase Free. Prisma 7, schema inicial, migration aplicada em
 homologação, logging estruturado/Request ID e domínio base de Campaign, Session
-e OneShot já existem. Auth/JWT e os demais fluxos não estão todos implementados.
+e OneShot já existem. Auth/JWT está implementada no código; administração completa
+de usuários e os demais fluxos continuam fora dessa entrega. A migration adicional
+de `authVersion` precisa ser aplicada pelo fluxo autorizado antes do deploy.
 API NestJS e MySQL no Railway são **produção planejada**, condicionada a
 homologação, métricas e validação da migração. Supabase é usado como PostgreSQL
 hospedado, sem adotar Auth ou outros serviços como fundação do domínio.

@@ -10,8 +10,9 @@ legal específico.
 
 ## Estado e princípios
 
-Prisma, schema/migration inicial e domínio base de mesas existem. Autenticação,
-gestão de conta/perfil, fluxo de exclusão, feedback, disciplina e audit log não
+Prisma, schema/migration inicial e domínio base de mesas existem. Cadastro,
+revisão inicial e JWT estão implementados no [contrato de auth](../api/auth.md).
+Gestão completa de conta/perfil, exclusão, feedback, disciplina e audit log não
 devem ser considerados implementados apenas porque seus modelos existem.
 As regras abaixo orientam a implementação e seus testes futuros; esta tarefa
 não cria endpoints nem jobs de retenção.
@@ -37,6 +38,7 @@ podem permitir vinculação a pessoas e não equivalem a anonimização.
 
 | Grupo / campos atuais | Finalidade e classificação | Acesso e minimização | Exclusão/anonimização e histórico |
 | --- | --- | --- | --- |
+| `User.authVersion` | Contador de revogação de JWT; interno ao serviço de autenticação | Consultado pelo guard e incrementado no logout; nunca incluído em respostas | Estado não APPROVED impede acesso; ao implementar exclusão/anonimização, também invalidar credenciais e versões anteriores |
 | Conta `User`: `email`, `passwordHash`, `status`, `systemRole`, `createdAt`, `updatedAt` | Identidade, acesso e ciclo de conta; privado/administrativo, hash restrito ao serviço | Titular vê dados próprios necessários, nunca hash; ADMIN/DEV aprovados usam apenas dados necessários à operação | Remover email/hash na anonimização; invalidar credenciais/sessões quando implementadas; conservar chave técnica apenas se relações históricas exigirem, com redução de vinculabilidade |
 | Administração da conta: `reviewedById`, `reviewedAt`, `reviewNote`, `suspendedById`, `suspendedAt`, `suspensionReason`, `deletionRequestedAt`, `deletionExpiresAt`, `anonymizedAt` | Aprovação, suspensão e exclusão; administrativo | Operadores autorizados; titular recebe estado/motivo pertinente por fluxo controlado, sem dados de terceiros desnecessários | Conservar somente decisão/metadados necessários; revisar texto livre e identificadores de operadores conforme necessidade histórica |
 | `UserClubRole`: `userId`, `role`, `grantedById`, `grantedAt` | Papéis cumulativos de negócio; privado/administrativo | Titular e administração; não publicar concessores ou papéis por conveniência | Remover concessões ativas na anonimização; eventual registro mínimo da decisão depende da necessidade de auditoria |

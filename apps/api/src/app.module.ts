@@ -10,6 +10,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { APP_FILTER, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { AuthModule } from './auth/auth.module';
 import { CampaignsModule } from './campaigns/campaigns.module';
 import { OneShotsModule } from './one-shots/one-shots.module';
 import { ApiExceptionFilter } from './observability/api-exception.filter';
@@ -25,6 +26,7 @@ import { TablesModule } from './tables/tables.module';
     ConfigModule.forRoot({ isGlobal: true }),
     ScheduleModule.forRoot(),
     PrismaModule,
+    AuthModule,
     TablesModule,
     CampaignsModule,
     SessionsModule,

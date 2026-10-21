@@ -11,6 +11,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
+import { Public } from '../auth/public.decorator';
 import { CurrentUserId } from '../common/http/current-user-id.decorator';
 import { CampaignsService } from './campaigns.service';
 import { ChangeCampaignStatusDto } from './dto/change-campaign-status.dto';
@@ -28,6 +29,7 @@ export class CampaignsController {
   }
 
   @Get('public')
+  @Public()
   findPublic(@Query() query: PaginationQueryDto) {
     return this.campaignsService.findPublic(query);
   }

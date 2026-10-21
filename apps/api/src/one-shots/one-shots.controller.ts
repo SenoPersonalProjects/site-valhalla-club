@@ -11,6 +11,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
+import { Public } from '../auth/public.decorator';
 import { CurrentUserId } from '../common/http/current-user-id.decorator';
 import { ChangeOneShotStatusDto } from './dto/change-one-shot-status.dto';
 import { CreateOneShotDto } from './dto/create-one-shot.dto';
@@ -29,6 +30,7 @@ export class OneShotsController {
   }
 
   @Get('public')
+  @Public()
   findPublic(@Query() query: PaginationQueryDto) {
     return this.oneShotsService.findPublic(query);
   }
