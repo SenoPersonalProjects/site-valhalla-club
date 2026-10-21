@@ -24,6 +24,9 @@ Consulte a [documentação de campanhas, sessões e one-shots](../../docs/api/ta
 - máximo de 2 campanhas ACTIVE por mestre, validado na publicação com aprovação
   inicial; DRAFTs não contam, a própria campanha é excluída na republicação e
   administradores não bypassam o limite;
+- publicação de Campaign já ACTIVE e reaprovação de ACTIVE + APPROVED são
+  no-ops autorizados, sem UPDATE e sem renovação de `updatedAt` ou dos metadados
+  de revisão. Nova nota em reaprovação repetida não substitui a anterior;
 - sessões posteriores de Campaign não removem aprovação; alteração de conteúdo
   continua removendo aprovação e exposição pública quando aplicável;
 - máximo global de 5 one-shots por sistema/mês de `Session.scheduledAt` em
@@ -41,6 +44,9 @@ Consulte a [documentação de campanhas, sessões e one-shots](../../docs/api/ta
 
 Publicação de Campaign, criação e correção estrutural de OneShot usam transações
 Prisma Serializable, com até três tentativas completas em conflito `P2034`.
+As demais mutações de Campaign/OneShot existentes também validam estado dentro
+da transação da escrita; a correção valida o sistema ativo com o mesmo
+TransactionClient, sem leituras de estado reaproveitadas entre tentativas.
 Erros novos: `CAMPAIGN_ACTIVE_LIMIT_REACHED`, `ONE_SHOT_MONTHLY_LIMIT_REACHED`,
 `ONE_SHOT_SCHEDULE_TOO_FAR`, `ONE_SHOT_ADMIN_CORRECTION_REQUIRED`,
 `ONE_SHOT_CORRECTION_EMPTY` e `TABLE_CONCURRENT_CHANGE`. Contratos e HTTP estão

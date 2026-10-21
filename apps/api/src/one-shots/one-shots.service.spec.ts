@@ -176,7 +176,10 @@ describe('OneShotsService', () => {
     });
     const transaction = {
       session: { update: jest.fn() },
-      oneShot: { update: jest.fn().mockResolvedValue(oneShot) },
+      oneShot: {
+        findUnique: oneShotRepository.findUnique,
+        update: jest.fn().mockResolvedValue(oneShot),
+      },
     };
     runTransaction.mockImplementation(async (operation: unknown) =>
       (operation as (client: typeof transaction) => Promise<unknown>)(
@@ -218,7 +221,10 @@ describe('OneShotsService', () => {
     });
     const transaction = {
       session: { update: jest.fn() },
-      oneShot: { update: jest.fn().mockResolvedValue(oneShot) },
+      oneShot: {
+        findUnique: oneShotRepository.findUnique,
+        update: jest.fn().mockResolvedValue(oneShot),
+      },
     };
     runTransaction.mockImplementation(async (operation: unknown) =>
       (operation as (client: typeof transaction) => Promise<unknown>)(
@@ -254,7 +260,10 @@ describe('OneShotsService', () => {
 
     const transaction = {
       session: { update: jest.fn() },
-      oneShot: { update: jest.fn().mockResolvedValue(oneShot) },
+      oneShot: {
+        findUnique: oneShotRepository.findUnique,
+        update: jest.fn().mockResolvedValue(oneShot),
+      },
     };
     runTransaction.mockImplementation(async (operation: unknown) =>
       (operation as (client: typeof transaction) => Promise<unknown>)(
@@ -377,7 +386,9 @@ describe('OneShotsService', () => {
     });
     expect(oneShotRepository.update).not.toHaveBeenCalled();
     expect(sessionRepository.update).not.toHaveBeenCalled();
-    expect(runTransaction).not.toHaveBeenCalled();
+    expect(runTransaction).toHaveBeenCalledWith(expect.any(Function), {
+      isolationLevel: 'Serializable',
+    });
   });
 
   it('allows normal title and description updates and resets approval', async () => {
@@ -411,6 +422,7 @@ describe('OneShotsService', () => {
     expect(actorMethods.assertAdministrator).toHaveBeenCalledWith('admin-1');
     expect(actorMethods.assertActiveGameSystem).toHaveBeenCalledWith(
       'system-2',
+      prisma,
     );
     expect(oneShotRepository.count).toHaveBeenCalledWith({
       where: {
@@ -525,6 +537,7 @@ describe('OneShotsService', () => {
       await service.correct('one-shot-1', 'admin-1', dto);
       expect(actorMethods.assertActiveGameSystem).toHaveBeenCalledWith(
         dto.gameSystemId ?? oneShot.gameSystemId,
+        prisma,
       );
       expect(sessionRepository.update).toHaveBeenCalledWith({
         where: { id: 'session-1' },

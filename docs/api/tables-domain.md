@@ -71,8 +71,12 @@ Uma campanha só entra em `ACTIVE` pelo endpoint de publicação e depois de
 receber aprovação administrativa.
 
 Cada mestre pode ter no máximo **2 campanhas ACTIVE simultaneamente**. DRAFTs
-não têm limite por essa regra. Publicação/republicação conta outras campanhas
-ACTIVE do mestre, excluindo a própria; ADMIN/DEV também respeitam o limite.
+não têm limite por essa regra. Transições DRAFT/INACTIVE → ACTIVE contam outras
+campanhas ACTIVE do mestre, excluindo a própria; ADMIN/DEV respeitam o limite.
+Publicar uma campanha já ACTIVE é no-op após autorização e aprovação: retorna
+o registro existente sem UPDATE, sem nova contagem de quota e sem renovar
+`updatedAt`. Repetir APPROVED em ACTIVE + APPROVED também é no-op, preservando
+inclusive revisor, data e nota anteriores, mesmo que outra nota seja enviada.
 Contagem, leitura da aprovação e ativação ocorrem na mesma transação Serializable.
 Alterações de conteúdo da campanha removem aprovação e, se ACTIVE, levam a
 INACTIVE. Adicionar sessões posteriores não remove a aprovação da campanha.
@@ -84,7 +88,8 @@ a `agora - 30 dias` e não há sessão não CANCELLED com `scheduledAt >= cutoff
 Sessões recentes, no exato cutoff ou futuras mantêm atividade; sessões CANCELLED
 não mantêm a campanha ativa. `updatedAt` fornece o baseline de publicação, dando
 aproximadamente 30 dias a uma campanha recém-publicada sem sessões. Como não há
-`publishedAt`, qualquer escrita posterior na campanha também renova esse baseline.
+`publishedAt`, escritas funcionais posteriores também podem renovar esse baseline;
+republicação e reaprovação sem transição não escrevem nem prorrogam a janela.
 
 `CampaignInactivityService` usa um `updateMany` Prisma tipado, idempotente, apenas
 ACTIVE → INACTIVE. DRAFT/INACTIVE/ARCHIVED não são alteradas. Executa no startup
@@ -219,6 +224,12 @@ três tentativas no total. Após esgotamento, retornar 409 `TABLE_CONCURRENT_CHA
 não reaproveitar contagem anterior ou continuar com escrita fora da transação.
 Rollback é responsabilidade da transação Prisma. Não há SQL raw, lock de provider
 ou dependência de Supabase nessas regras.
+
+Mutações de Campaign e OneShot existentes também leem e validam o estado dentro
+da transação Serializable da escrita, evitando decisões baseadas em estado
+anterior a uma publicação, edição, encerramento ou correção concorrente. Na
+correção de one-shot, a leitura do sistema ativo usa o mesmo TransactionClient
+da quota e das atualizações de Session + OneShot. Os retries releem esses dados.
 
 | Código | HTTP | Condição |
 | --- | --- | --- |

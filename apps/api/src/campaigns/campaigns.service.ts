@@ -104,84 +104,88 @@ export class CampaignsService {
   }
 
   async update(id: string, actorId: string, dto: UpdateCampaignDto) {
-    const campaign = await this.getByIdOrThrow(id);
-    await this.actors.assertCanManage(campaign.masterId, actorId);
+    return this.rules.serializable(async (transaction) => {
+      const campaign = await this.getByIdOrThrow(id, transaction);
+      await this.actors.assertCanManage(campaign.masterId, actorId);
 
-    if (campaign.status === CampaignStatus.ARCHIVED) {
-      throw conflict(
-        'CAMPAIGN_ARCHIVED',
-        'Campanhas arquivadas não podem ser alteradas',
-      );
-    }
+      if (campaign.status === CampaignStatus.ARCHIVED) {
+        throw conflict(
+          'CAMPAIGN_ARCHIVED',
+          'Campanhas arquivadas não podem ser alteradas',
+        );
+      }
 
-    if (!this.hasUpdate(dto)) {
-      throw badRequest(
-        'CAMPAIGN_UPDATE_EMPTY',
-        'Informe ao menos um campo para atualizar',
-      );
-    }
+      if (!this.hasUpdate(dto)) {
+        throw badRequest(
+          'CAMPAIGN_UPDATE_EMPTY',
+          'Informe ao menos um campo para atualizar',
+        );
+      }
 
-    if (dto.gameSystemId) {
-      await this.actors.assertActiveGameSystem(dto.gameSystemId);
-    }
+      if (dto.gameSystemId) {
+        await this.actors.assertActiveGameSystem(dto.gameSystemId, transaction);
+      }
 
-    const data: Prisma.CampaignUncheckedUpdateInput = {
-      ...(dto.gameSystemId ? { gameSystemId: dto.gameSystemId } : {}),
-      ...(dto.title
-        ? {
-            title: this.normalizeRequiredText(
-              dto.title,
-              'CAMPAIGN_TITLE_REQUIRED',
-            ),
-          }
-        : {}),
-      ...(dto.description !== undefined
-        ? { description: this.normalizeOptionalText(dto.description) }
-        : {}),
-      approvalStatus: ApprovalStatus.PENDING,
-      reviewedById: null,
-      reviewedAt: null,
-      reviewNote: null,
-      ...(campaign.status === CampaignStatus.ACTIVE
-        ? { status: CampaignStatus.INACTIVE }
-        : {}),
-    };
+      const data: Prisma.CampaignUncheckedUpdateInput = {
+        ...(dto.gameSystemId ? { gameSystemId: dto.gameSystemId } : {}),
+        ...(dto.title
+          ? {
+              title: this.normalizeRequiredText(
+                dto.title,
+                'CAMPAIGN_TITLE_REQUIRED',
+              ),
+            }
+          : {}),
+        ...(dto.description !== undefined
+          ? { description: this.normalizeOptionalText(dto.description) }
+          : {}),
+        approvalStatus: ApprovalStatus.PENDING,
+        reviewedById: null,
+        reviewedAt: null,
+        reviewNote: null,
+        ...(campaign.status === CampaignStatus.ACTIVE
+          ? { status: CampaignStatus.INACTIVE }
+          : {}),
+      };
 
-    return this.prisma.campaign.update({
-      where: { id },
-      data,
-      include: campaignDetails,
+      return transaction.campaign.update({
+        where: { id },
+        data,
+        include: campaignDetails,
+      });
     });
   }
 
   async remove(id: string, actorId: string): Promise<void> {
-    const campaign = await this.prisma.campaign.findUnique({
-      where: { id },
-      select: {
-        masterId: true,
-        status: true,
-        _count: { select: { sessions: true, sanctionScopes: true } },
-      },
+    return this.rules.serializable(async (transaction) => {
+      const campaign = await transaction.campaign.findUnique({
+        where: { id },
+        select: {
+          masterId: true,
+          status: true,
+          _count: { select: { sessions: true, sanctionScopes: true } },
+        },
+      });
+
+      if (!campaign) {
+        throw notFound('CAMPAIGN_NOT_FOUND', 'Campanha não encontrada');
+      }
+
+      await this.actors.assertCanManage(campaign.masterId, actorId);
+
+      if (
+        campaign.status !== CampaignStatus.DRAFT ||
+        campaign._count.sessions > 0 ||
+        campaign._count.sanctionScopes > 0
+      ) {
+        throw conflict(
+          'CAMPAIGN_DELETE_NOT_ALLOWED',
+          'Somente campanhas em rascunho e sem histórico podem ser removidas; arquive a campanha',
+        );
+      }
+
+      await transaction.campaign.delete({ where: { id } });
     });
-
-    if (!campaign) {
-      throw notFound('CAMPAIGN_NOT_FOUND', 'Campanha não encontrada');
-    }
-
-    await this.actors.assertCanManage(campaign.masterId, actorId);
-
-    if (
-      campaign.status !== CampaignStatus.DRAFT ||
-      campaign._count.sessions > 0 ||
-      campaign._count.sanctionScopes > 0
-    ) {
-      throw conflict(
-        'CAMPAIGN_DELETE_NOT_ALLOWED',
-        'Somente campanhas em rascunho e sem histórico podem ser removidas; arquive a campanha',
-      );
-    }
-
-    await this.prisma.campaign.delete({ where: { id } });
   }
 
   async publish(id: string, actorId: string) {
@@ -203,6 +207,10 @@ export class CampaignsService {
         );
       }
 
+      if (campaign.status === CampaignStatus.ACTIVE) {
+        return campaign;
+      }
+
       await this.rules.assertCampaignCapacity(
         transaction,
         campaign.masterId,
@@ -221,70 +229,85 @@ export class CampaignsService {
     actorId: string,
     dto: ChangeCampaignStatusDto,
   ) {
-    const campaign = await this.getByIdOrThrow(id);
-    await this.actors.assertCanManage(campaign.masterId, actorId);
+    return this.rules.serializable(async (transaction) => {
+      const campaign = await this.getByIdOrThrow(id, transaction);
+      await this.actors.assertCanManage(campaign.masterId, actorId);
 
-    if (dto.status === CampaignStatus.ACTIVE) {
-      throw badRequest(
-        'CAMPAIGN_USE_PUBLISH_ENDPOINT',
-        'Use o endpoint de publicação para ativar a campanha',
-      );
-    }
+      if (dto.status === CampaignStatus.ACTIVE) {
+        throw badRequest(
+          'CAMPAIGN_USE_PUBLISH_ENDPOINT',
+          'Use o endpoint de publicação para ativar a campanha',
+        );
+      }
 
-    const allowedTargets = this.allowedStatusTargets(campaign.status);
-    if (!allowedTargets.includes(dto.status)) {
-      throw conflict(
-        'CAMPAIGN_STATUS_TRANSITION_INVALID',
-        `A campanha não pode passar de ${campaign.status} para ${dto.status}`,
-      );
-    }
+      const allowedTargets = this.allowedStatusTargets(campaign.status);
+      if (!allowedTargets.includes(dto.status)) {
+        throw conflict(
+          'CAMPAIGN_STATUS_TRANSITION_INVALID',
+          `A campanha não pode passar de ${campaign.status} para ${dto.status}`,
+        );
+      }
 
-    return this.prisma.campaign.update({
-      where: { id },
-      data: { status: dto.status },
-      include: campaignDetails,
+      return transaction.campaign.update({
+        where: { id },
+        data: { status: dto.status },
+        include: campaignDetails,
+      });
     });
   }
 
   async review(id: string, reviewerId: string, dto: ReviewCampaignDto) {
     await this.actors.assertAdministrator(reviewerId);
-    const campaign = await this.getByIdOrThrow(id);
-    const note = this.normalizeOptionalText(dto.note);
+    return this.rules.serializable(async (transaction) => {
+      const campaign = await this.getByIdOrThrow(id, transaction);
+      const note = this.normalizeOptionalText(dto.note);
 
-    if (
-      dto.decision !== ApprovalStatus.APPROVED &&
-      dto.decision !== ApprovalStatus.REJECTED
-    ) {
-      throw badRequest(
-        'APPROVAL_DECISION_INVALID',
-        'A decisão deve aprovar ou rejeitar a campanha',
-      );
-    }
+      if (
+        dto.decision !== ApprovalStatus.APPROVED &&
+        dto.decision !== ApprovalStatus.REJECTED
+      ) {
+        throw badRequest(
+          'APPROVAL_DECISION_INVALID',
+          'A decisão deve aprovar ou rejeitar a campanha',
+        );
+      }
 
-    if (dto.decision === ApprovalStatus.REJECTED && !note) {
-      throw badRequest('REVIEW_NOTE_REQUIRED', 'Informe o motivo da rejeição');
-    }
+      if (dto.decision === ApprovalStatus.REJECTED && !note) {
+        throw badRequest(
+          'REVIEW_NOTE_REQUIRED',
+          'Informe o motivo da rejeição',
+        );
+      }
 
-    if (campaign.status === CampaignStatus.ARCHIVED) {
-      throw conflict(
-        'CAMPAIGN_ARCHIVED',
-        'Campanhas arquivadas não podem ser revisadas',
-      );
-    }
+      if (campaign.status === CampaignStatus.ARCHIVED) {
+        throw conflict(
+          'CAMPAIGN_ARCHIVED',
+          'Campanhas arquivadas não podem ser revisadas',
+        );
+      }
 
-    return this.prisma.campaign.update({
-      where: { id },
-      data: {
-        approvalStatus: dto.decision,
-        reviewedById: reviewerId,
-        reviewedAt: new Date(),
-        reviewNote: note,
-        ...(dto.decision === ApprovalStatus.REJECTED &&
-        campaign.status === CampaignStatus.ACTIVE
-          ? { status: CampaignStatus.INACTIVE }
-          : {}),
-      },
-      include: campaignDetails,
+      if (
+        campaign.status === CampaignStatus.ACTIVE &&
+        campaign.approvalStatus === ApprovalStatus.APPROVED &&
+        dto.decision === ApprovalStatus.APPROVED
+      ) {
+        return campaign;
+      }
+
+      return transaction.campaign.update({
+        where: { id },
+        data: {
+          approvalStatus: dto.decision,
+          reviewedById: reviewerId,
+          reviewedAt: new Date(),
+          reviewNote: note,
+          ...(dto.decision === ApprovalStatus.REJECTED &&
+          campaign.status === CampaignStatus.ACTIVE
+            ? { status: CampaignStatus.INACTIVE }
+            : {}),
+        },
+        include: campaignDetails,
+      });
     });
   }
 

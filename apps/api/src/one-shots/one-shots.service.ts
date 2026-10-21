@@ -126,52 +126,52 @@ export class OneShotsService {
   }
 
   async update(id: string, actorId: string, dto: UpdateOneShotDto) {
-    const oneShot = await this.getByIdOrThrow(id);
-    await this.actors.assertCanManage(oneShot.masterId, actorId);
+    return this.rules.serializable(async (transaction) => {
+      const oneShot = await this.getByIdOrThrow(id, transaction);
+      await this.actors.assertCanManage(oneShot.masterId, actorId);
 
-    if (
-      dto.gameSystemId !== undefined ||
-      dto.session?.scheduledAt !== undefined
-    ) {
-      throw conflict(
-        'ONE_SHOT_ADMIN_CORRECTION_REQUIRED',
-        'Sistema e data exigem correção administrativa do one-shot',
-      );
-    }
+      if (
+        dto.gameSystemId !== undefined ||
+        dto.session?.scheduledAt !== undefined
+      ) {
+        throw conflict(
+          'ONE_SHOT_ADMIN_CORRECTION_REQUIRED',
+          'Sistema e data exigem correção administrativa do one-shot',
+        );
+      }
 
-    if (
-      oneShot.status === OneShotStatus.CANCELLED ||
-      oneShot.status === OneShotStatus.COMPLETED
-    ) {
-      throw conflict(
-        'ONE_SHOT_CLOSED',
-        'One-shots cancelados ou concluídos não podem ser alterados',
-      );
-    }
+      if (
+        oneShot.status === OneShotStatus.CANCELLED ||
+        oneShot.status === OneShotStatus.COMPLETED
+      ) {
+        throw conflict(
+          'ONE_SHOT_CLOSED',
+          'One-shots cancelados ou concluídos não podem ser alterados',
+        );
+      }
 
-    if (!this.hasUpdate(dto)) {
-      throw badRequest(
-        'ONE_SHOT_UPDATE_EMPTY',
-        'Informe ao menos um campo para atualizar',
-      );
-    }
+      if (!this.hasUpdate(dto)) {
+        throw badRequest(
+          'ONE_SHOT_UPDATE_EMPTY',
+          'Informe ao menos um campo para atualizar',
+        );
+      }
 
-    if (!oneShot.session) {
-      throw conflict(
-        'ONE_SHOT_WITHOUT_SESSION',
-        'O one-shot não possui a sessão obrigatória',
-      );
-    }
+      if (!oneShot.session) {
+        throw conflict(
+          'ONE_SHOT_WITHOUT_SESSION',
+          'O one-shot não possui a sessão obrigatória',
+        );
+      }
 
-    const sessionData = dto.session
-      ? {
-          ...(dto.session.title !== undefined
-            ? { title: this.normalizeOptionalText(dto.session.title) }
-            : {}),
-        }
-      : undefined;
+      const sessionData = dto.session
+        ? {
+            ...(dto.session.title !== undefined
+              ? { title: this.normalizeOptionalText(dto.session.title) }
+              : {}),
+          }
+        : undefined;
 
-    return this.prisma.$transaction(async (transaction) => {
       if (sessionData && Object.keys(sessionData).length > 0) {
         await transaction.session.update({
           where: { id: oneShot.session!.id },
@@ -202,28 +202,28 @@ export class OneShotsService {
   }
 
   async remove(id: string, actorId: string): Promise<void> {
-    const oneShot = await this.getByIdOrThrow(id);
-    await this.actors.assertCanManage(oneShot.masterId, actorId);
+    return this.rules.serializable(async (transaction) => {
+      const oneShot = await this.getByIdOrThrow(id, transaction);
+      await this.actors.assertCanManage(oneShot.masterId, actorId);
 
-    if (!oneShot.session) {
-      throw conflict(
-        'ONE_SHOT_WITHOUT_SESSION',
-        'O one-shot não possui a sessão obrigatória',
+      if (!oneShot.session) {
+        throw conflict(
+          'ONE_SHOT_WITHOUT_SESSION',
+          'O one-shot não possui a sessão obrigatória',
+        );
+      }
+
+      const hasHistory = Object.values(oneShot.session._count).some(
+        (count) => count > 0,
       );
-    }
 
-    const hasHistory = Object.values(oneShot.session._count).some(
-      (count) => count > 0,
-    );
+      if (oneShot.status !== OneShotStatus.DRAFT || hasHistory) {
+        throw conflict(
+          'ONE_SHOT_DELETE_NOT_ALLOWED',
+          'Somente one-shots em rascunho e sem histórico podem ser removidos',
+        );
+      }
 
-    if (oneShot.status !== OneShotStatus.DRAFT || hasHistory) {
-      throw conflict(
-        'ONE_SHOT_DELETE_NOT_ALLOWED',
-        'Somente one-shots em rascunho e sem histórico podem ser removidos',
-      );
-    }
-
-    await this.prisma.$transaction(async (transaction) => {
       await transaction.session.delete({ where: { id: oneShot.session!.id } });
       await transaction.oneShot.delete({ where: { id } });
     });
@@ -255,7 +255,7 @@ export class OneShotsService {
         );
       }
       const gameSystemId = dto.gameSystemId ?? oneShot.gameSystemId;
-      await this.actors.assertActiveGameSystem(gameSystemId);
+      await this.actors.assertActiveGameSystem(gameSystemId, transaction);
       const scheduledAt = this.rules.parseOneShotDate(
         dto.scheduledAt ?? oneShot.session.scheduledAt.toISOString(),
       );
@@ -287,92 +287,94 @@ export class OneShotsService {
   }
 
   async publish(id: string, actorId: string) {
-    const oneShot = await this.getByIdOrThrow(id);
-    await this.actors.assertCanManage(oneShot.masterId, actorId);
+    return this.rules.serializable(async (transaction) => {
+      const oneShot = await this.getByIdOrThrow(id, transaction);
+      await this.actors.assertCanManage(oneShot.masterId, actorId);
 
-    if (oneShot.approvalStatus !== ApprovalStatus.APPROVED) {
-      throw conflict(
-        'ONE_SHOT_NOT_APPROVED',
-        'O one-shot precisa ser aprovado antes da publicação',
-      );
-    }
+      if (oneShot.approvalStatus !== ApprovalStatus.APPROVED) {
+        throw conflict(
+          'ONE_SHOT_NOT_APPROVED',
+          'O one-shot precisa ser aprovado antes da publicação',
+        );
+      }
 
-    if (!oneShot.session || oneShot.session.scheduledAt <= new Date()) {
-      throw conflict(
-        'ONE_SHOT_DATE_INVALID',
-        'O one-shot precisa possuir uma sessão futura para ser publicado',
-      );
-    }
+      if (!oneShot.session || oneShot.session.scheduledAt <= new Date()) {
+        throw conflict(
+          'ONE_SHOT_DATE_INVALID',
+          'O one-shot precisa possuir uma sessão futura para ser publicado',
+        );
+      }
 
-    if (
-      oneShot.status === OneShotStatus.CANCELLED ||
-      oneShot.status === OneShotStatus.COMPLETED
-    ) {
-      throw conflict(
-        'ONE_SHOT_CLOSED',
-        'One-shots cancelados ou concluídos não podem ser publicados',
-      );
-    }
+      if (
+        oneShot.status === OneShotStatus.CANCELLED ||
+        oneShot.status === OneShotStatus.COMPLETED
+      ) {
+        throw conflict(
+          'ONE_SHOT_CLOSED',
+          'One-shots cancelados ou concluídos não podem ser publicados',
+        );
+      }
 
-    return this.prisma.oneShot.update({
-      where: { id },
-      data: { status: OneShotStatus.SCHEDULED },
-      include: oneShotPrivateDetails,
+      return transaction.oneShot.update({
+        where: { id },
+        data: { status: OneShotStatus.SCHEDULED },
+        include: oneShotPrivateDetails,
+      });
     });
   }
 
   async changeStatus(id: string, actorId: string, dto: ChangeOneShotStatusDto) {
-    const oneShot = await this.getByIdOrThrow(id);
-    await this.actors.assertCanManage(oneShot.masterId, actorId);
+    return this.rules.serializable(async (transaction) => {
+      const oneShot = await this.getByIdOrThrow(id, transaction);
+      await this.actors.assertCanManage(oneShot.masterId, actorId);
 
-    if (oneShot.status !== OneShotStatus.SCHEDULED) {
-      throw conflict(
-        'ONE_SHOT_STATUS_TRANSITION_INVALID',
-        `O one-shot não pode passar de ${oneShot.status} para ${dto.status}`,
-      );
-    }
+      if (oneShot.status !== OneShotStatus.SCHEDULED) {
+        throw conflict(
+          'ONE_SHOT_STATUS_TRANSITION_INVALID',
+          `O one-shot não pode passar de ${oneShot.status} para ${dto.status}`,
+        );
+      }
 
-    if (
-      dto.status !== OneShotStatus.CANCELLED &&
-      dto.status !== OneShotStatus.COMPLETED
-    ) {
-      throw badRequest(
-        'ONE_SHOT_STATUS_INVALID',
-        'Um one-shot publicado pode apenas ser cancelado ou concluído',
-      );
-    }
+      if (
+        dto.status !== OneShotStatus.CANCELLED &&
+        dto.status !== OneShotStatus.COMPLETED
+      ) {
+        throw badRequest(
+          'ONE_SHOT_STATUS_INVALID',
+          'Um one-shot publicado pode apenas ser cancelado ou concluído',
+        );
+      }
 
-    const cancellationReason = this.normalizeOptionalText(dto.reason);
-    if (dto.status === OneShotStatus.CANCELLED && !cancellationReason) {
-      throw badRequest(
-        'CANCELLATION_REASON_REQUIRED',
-        'Informe o motivo do cancelamento',
-      );
-    }
+      const cancellationReason = this.normalizeOptionalText(dto.reason);
+      if (dto.status === OneShotStatus.CANCELLED && !cancellationReason) {
+        throw badRequest(
+          'CANCELLATION_REASON_REQUIRED',
+          'Informe o motivo do cancelamento',
+        );
+      }
 
-    if (!oneShot.session) {
-      throw conflict(
-        'ONE_SHOT_WITHOUT_SESSION',
-        'O one-shot não possui a sessão obrigatória',
-      );
-    }
+      if (!oneShot.session) {
+        throw conflict(
+          'ONE_SHOT_WITHOUT_SESSION',
+          'O one-shot não possui a sessão obrigatória',
+        );
+      }
 
-    if (
-      dto.status === OneShotStatus.COMPLETED &&
-      oneShot.session.scheduledAt > new Date()
-    ) {
-      throw conflict(
-        'ONE_SHOT_NOT_STARTED',
-        'Um one-shot futuro não pode ser concluído',
-      );
-    }
+      if (
+        dto.status === OneShotStatus.COMPLETED &&
+        oneShot.session.scheduledAt > new Date()
+      ) {
+        throw conflict(
+          'ONE_SHOT_NOT_STARTED',
+          'Um one-shot futuro não pode ser concluído',
+        );
+      }
 
-    const sessionStatus =
-      dto.status === OneShotStatus.CANCELLED
-        ? SessionStatus.CANCELLED
-        : SessionStatus.COMPLETED;
+      const sessionStatus =
+        dto.status === OneShotStatus.CANCELLED
+          ? SessionStatus.CANCELLED
+          : SessionStatus.COMPLETED;
 
-    return this.prisma.$transaction(async (transaction) => {
       await transaction.session.update({
         where: { id: oneShot.session!.id },
         data: {
@@ -396,46 +398,51 @@ export class OneShotsService {
 
   async review(id: string, reviewerId: string, dto: ReviewOneShotDto) {
     await this.actors.assertAdministrator(reviewerId);
-    const oneShot = await this.getByIdOrThrow(id);
-    const note = this.normalizeOptionalText(dto.note);
+    return this.rules.serializable(async (transaction) => {
+      const oneShot = await this.getByIdOrThrow(id, transaction);
+      const note = this.normalizeOptionalText(dto.note);
 
-    if (
-      dto.decision !== ApprovalStatus.APPROVED &&
-      dto.decision !== ApprovalStatus.REJECTED
-    ) {
-      throw badRequest(
-        'APPROVAL_DECISION_INVALID',
-        'A decisão deve aprovar ou rejeitar o one-shot',
-      );
-    }
+      if (
+        dto.decision !== ApprovalStatus.APPROVED &&
+        dto.decision !== ApprovalStatus.REJECTED
+      ) {
+        throw badRequest(
+          'APPROVAL_DECISION_INVALID',
+          'A decisão deve aprovar ou rejeitar o one-shot',
+        );
+      }
 
-    if (dto.decision === ApprovalStatus.REJECTED && !note) {
-      throw badRequest('REVIEW_NOTE_REQUIRED', 'Informe o motivo da rejeição');
-    }
+      if (dto.decision === ApprovalStatus.REJECTED && !note) {
+        throw badRequest(
+          'REVIEW_NOTE_REQUIRED',
+          'Informe o motivo da rejeição',
+        );
+      }
 
-    if (
-      oneShot.status === OneShotStatus.CANCELLED ||
-      oneShot.status === OneShotStatus.COMPLETED
-    ) {
-      throw conflict(
-        'ONE_SHOT_CLOSED',
-        'One-shots cancelados ou concluídos não podem ser revisados',
-      );
-    }
+      if (
+        oneShot.status === OneShotStatus.CANCELLED ||
+        oneShot.status === OneShotStatus.COMPLETED
+      ) {
+        throw conflict(
+          'ONE_SHOT_CLOSED',
+          'One-shots cancelados ou concluídos não podem ser revisados',
+        );
+      }
 
-    return this.prisma.oneShot.update({
-      where: { id },
-      data: {
-        approvalStatus: dto.decision,
-        reviewedById: reviewerId,
-        reviewedAt: new Date(),
-        reviewNote: note,
-        ...(dto.decision === ApprovalStatus.REJECTED &&
-        oneShot.status === OneShotStatus.SCHEDULED
-          ? { status: OneShotStatus.DRAFT }
-          : {}),
-      },
-      include: oneShotPrivateDetails,
+      return transaction.oneShot.update({
+        where: { id },
+        data: {
+          approvalStatus: dto.decision,
+          reviewedById: reviewerId,
+          reviewedAt: new Date(),
+          reviewNote: note,
+          ...(dto.decision === ApprovalStatus.REJECTED &&
+          oneShot.status === OneShotStatus.SCHEDULED
+            ? { status: OneShotStatus.DRAFT }
+            : {}),
+        },
+        include: oneShotPrivateDetails,
+      });
     });
   }
 
