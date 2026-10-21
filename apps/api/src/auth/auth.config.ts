@@ -14,7 +14,12 @@ export function jwtConfiguration(config: ConfigService): JwtModuleOptions {
     );
   const units: Record<string, number> = { s: 1, m: 60, h: 3600, d: 86400 };
   const seconds = Number(match[1]) * units[match[2] ?? 's'];
-  if (!Number.isSafeInteger(seconds))
+  const expiresAt = Math.floor(Date.now() / 1000) + seconds;
+  if (
+    !Number.isSafeInteger(seconds) ||
+    !Number.isSafeInteger(expiresAt) ||
+    !Number.isFinite(new Date(expiresAt * 1000).getTime())
+  )
     throw new Error('JWT_EXPIRES_IN fora do intervalo suportado');
   return {
     secret,

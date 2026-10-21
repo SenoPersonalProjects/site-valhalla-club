@@ -37,7 +37,8 @@ regra vigente de concessão automática de PLAYER. Papéis permanecem cumulativo
 independentes do SystemRole. Nenhum campo de role/status é aceito no cadastro.
 
 Senha usa `bcryptjs` com custo **12** centralizado em `PASSWORD_COST`. Mínimo de
-12 caracteres; máximo de 72 bytes UTF-8 para evitar truncamento do bcrypt.
+12 caracteres Unicode (pontos de código, sem contar um par UTF-16 duas vezes);
+máximo de 72 bytes UTF-8 para evitar truncamento do bcrypt, inclusive no login.
 Não há exigência arbitrária de composição nem normalização da senha.
 Somente o hash é persistido; ele nunca é retornado.
 
@@ -54,6 +55,9 @@ Não há email, perfil, roles ou disciplina no token. `JWT_SECRET` e
 `JWT_EXPIRES_IN` vêm somente do ambiente; não há fallback. Secret exige pelo
 menos 32 bytes e deve ser aleatório forte. Expiração aceita inteiro positivo em
 segundos ou sufixos `s/m/h/d`. Configuração ausente/inválida impede inicialização.
+O timestamp resultante precisa ser inteiro seguro e representável como Date no
+runtime; durações que excedem esses limites são rejeitadas. O guard exige `exp`
+numérico finito, além da verificação de expiração feita pela biblioteca.
 Trocar o secret invalida os tokens assinados pela chave anterior.
 
 Em cada request privado, o guard valida assinatura/expiração/tipo/claims e consulta
@@ -81,6 +85,8 @@ impede sobrescrever uma decisão concorrente. Não há Serializable desnecessár
 
 Registra `reviewedById`, `reviewedAt`, `reviewNote`. Uma repetição da mesma decisão
 é no-op e preserva metadados; decisões diferentes só são aceitas para PENDING.
+REJECTED exige nota não vazia em toda requisição, inclusive em uma repetição:
+sem nota retorna 400; com nota faz no-op e não substitui a justificativa original.
 Não há reversão de rejeição, suspensão/reativação nem grant/remove MASTER aqui.
 Provisionamento inicial de ADMIN/DEV é operacional e controlado, fora do cadastro.
 
@@ -120,3 +126,6 @@ Bearer em Campaign/Session/OneShot/Tables. A suíte de domínio anterior tem ove
 explícito do guard no TestingModule. Não existe middleware de identidade ou
 backdoor de produção. Integração contra banco real e aplicação da migration
 precisam ser validadas no ambiente autorizado antes do deploy.
+
+Follow-up da revisão de segurança: rate limiting em `/auth/login` e rate limiting /
+anti-spam em `/auth/register`. Esses controles não estão implementados nesta task.

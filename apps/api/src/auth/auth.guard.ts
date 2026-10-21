@@ -52,7 +52,8 @@ export class AuthGuard implements CanActivate {
         claims.type !== 'access' ||
         !Number.isSafeInteger(claims.ver) ||
         Number(claims.ver) < 0 ||
-        typeof claims.exp !== 'number'
+        typeof claims.exp !== 'number' ||
+        !Number.isFinite(claims.exp)
       ) {
         throw new Error('Invalid claims');
       }

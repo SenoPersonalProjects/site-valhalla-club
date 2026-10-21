@@ -2,6 +2,12 @@ import { adultBirthDate, normalizeWhatsapp } from './auth.validation';
 import { PasswordService, PASSWORD_COST } from './password.service';
 import { jwtConfiguration } from './auth.config';
 import { ConfigService } from '@nestjs/config';
+import * as bcrypt from 'bcryptjs';
+
+jest.mock('bcryptjs', () => {
+  const actual = jest.requireActual<typeof import('bcryptjs')>('bcryptjs');
+  return { ...actual, compare: jest.fn(actual.compare) };
+});
 
 describe('Registration validation', () => {
   it('normalizes explicitly international phone numbers', () => {
@@ -58,12 +64,26 @@ describe('PasswordService', () => {
     expect(await service.verify('another password', hash)).toBe(false);
     expect(await service.verify('a long test password', null)).toBe(false);
   });
-  it.each(['short', 'é'.repeat(37)])(
+  it.each(['short', 'é'.repeat(37), '😀'.repeat(6)])(
     'rejects trivial passwords and bcrypt truncation',
     (password) => {
       expect(() => service.hash(password)).toThrow('A senha deve');
     },
   );
+  it('uses a valid dummy hash with the same cost for absent/null credentials', async () => {
+    expect(await service.verify('a test password', null)).toBe(false);
+    const dummy = jest.mocked(bcrypt.compare).mock.calls.at(-1)![1];
+    expect(dummy).toMatch(/^\$2[aby]\$12\$[./A-Za-z0-9]{53}$/);
+    expect(bcrypt.getRounds(dummy)).toBe(PASSWORD_COST);
+  });
+  it('counts Unicode code points and accepts exactly 72 UTF-8 bytes without allowing login truncation', async () => {
+    const password = '😀'.repeat(18);
+    const hash = await service.hash(password);
+    expect(Buffer.byteLength(password)).toBe(72);
+    expect(await service.verify(password, hash)).toBe(true);
+    // bcrypt itself truncates this suffix; the service must reject that match.
+    expect(await service.verify(`${password}x`, hash)).toBe(false);
+  });
 });
 
 describe('JWT configuration', () => {
@@ -87,4 +107,21 @@ describe('JWT configuration', () => {
       verifyOptions: { algorithms: ['HS256'] },
     });
   });
+  it.each([
+    '9007199254740991s',
+    '8640000000000s',
+    '999999999999999999999999d',
+    '-1',
+    '1.5h',
+    '15m\n',
+  ])(
+    'rejects unsafe, unrepresentable or malformed expiration %s',
+    (expiration) => {
+      expect(() =>
+        jwtConfiguration(
+          config({ JWT_SECRET: 'x'.repeat(32), JWT_EXPIRES_IN: expiration }),
+        ),
+      ).toThrow();
+    },
+  );
 });

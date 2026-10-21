@@ -2,6 +2,10 @@ import { Controller, Get, INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
+import { ModulesContainer, Reflector } from '@nestjs/core';
+import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
+import { RequestMethod } from '@nestjs/common';
+import { PUBLIC_ROUTE } from '../src/auth/public.decorator';
 import request from 'supertest';
 import * as bcrypt from 'bcryptjs';
 import { AppModule } from '../src/app.module';
@@ -185,6 +189,74 @@ describe('Authentication with real Bearer JWT (e2e)', () => {
     displayName: ' New Player ',
     whatsappNumber: '+55 (82) 99999-9999',
     birthDate: '1990-01-01',
+  });
+  it('has exactly the six deliberate public routes across every loaded controller', () => {
+    const publicRoutes: string[] = [];
+    const reflector = app.get(Reflector);
+    for (const module of app.get(ModulesContainer).values()) {
+      for (const wrapper of module.controllers.values()) {
+        const controller = wrapper.metatype;
+        if (!controller) continue;
+        for (const name of Object.getOwnPropertyNames(controller.prototype)) {
+          const handler = controller.prototype[name];
+          const method = Reflect.getMetadata(METHOD_METADATA, handler);
+          if (
+            method === undefined ||
+            !reflector.getAllAndOverride(PUBLIC_ROUTE, [handler, controller])
+          )
+            continue;
+          const path =
+            [
+              Reflect.getMetadata(PATH_METADATA, controller),
+              Reflect.getMetadata(PATH_METADATA, handler),
+            ]
+              .join('/')
+              .replace(/\/+/g, '/')
+              .replace(/^\/?/, '/')
+              .replace(/\/$/, '') || '/';
+          publicRoutes.push(`${RequestMethod[method]} ${path}`);
+        }
+      }
+    }
+    expect(publicRoutes.sort()).toEqual(
+      [
+        'GET /',
+        'GET /health',
+        'GET /campaigns/public',
+        'GET /one-shots/public',
+        'POST /auth/register',
+        'POST /auth/login',
+      ].sort(),
+    );
+  });
+  it.each(['status', 'systemRole', 'clubRoles', 'authVersion'])(
+    'forbids injecting %s in registration',
+    async (field) => {
+      await request(app.getHttpServer())
+        .post('/auth/register')
+        .send({
+          ...registration(),
+          [field]: field === 'authVersion' ? 100 : 'ADMIN',
+        })
+        .expect(400);
+      expect(prisma.user.create).not.toHaveBeenCalled();
+    },
+  );
+  it('does not accept token or identity from cookies, query, body or alternative headers', async () => {
+    const bearer = token();
+    await request(app.getHttpServer())
+      .get('/auth/me')
+      .query({ accessToken: bearer })
+      .set('Cookie', `accessToken=${bearer}`)
+      .set('x-user-id', 'admin')
+      .send({ accessToken: bearer, user: { id: 'admin' } })
+      .expect(401);
+  });
+  it('handles null passwordHash as INVALID_CREDENTIALS without disclosing account status', async () => {
+    users.get('master').passwordHash = null;
+    users.get('master').status = 'ANONYMIZED';
+    const response = await login().expect(401);
+    expect(response.body.code).toBe('INVALID_CREDENTIALS');
   });
   const login = (id = 'master', candidatePassword = password) =>
     request(app.getHttpServer())

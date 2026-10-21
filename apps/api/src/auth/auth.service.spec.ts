@@ -244,4 +244,135 @@ describe('AuthService', () => {
     await service.review('target', 'admin', { decision: 'APPROVED' });
     expect(transaction.user.updateMany).not.toHaveBeenCalled();
   });
+  it('requires a note even for a repeated REJECTED decision and never rewrites metadata', async () => {
+    transaction.user.findUnique.mockResolvedValue({
+      id: 'target',
+      status: 'REJECTED',
+    });
+    await expect(
+      service.review('target', 'admin', { decision: 'REJECTED' }),
+    ).rejects.toMatchObject({
+      response: { code: 'REGISTRATION_REJECTION_NOTE_REQUIRED' },
+    });
+    await expect(
+      service.review('target', 'admin', {
+        decision: 'REJECTED',
+        note: 'New note must not replace old note',
+      }),
+    ).resolves.toEqual({ id: 'target', status: 'REJECTED' });
+    expect(transaction.user.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('Authentication concurrency', () => {
+  it('allows only one decision when two reviewers both read PENDING', async () => {
+    let state: Record<string, unknown> = {
+      id: 'target',
+      status: AccountStatus.PENDING,
+    };
+    let readers = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const updates: unknown[] = [];
+    const clients: unknown[] = [];
+    const root = {
+      user: {
+        findUnique: jest.fn(() => {
+          throw new Error('State read outside transaction');
+        }),
+        updateMany: jest.fn(() => {
+          throw new Error('Write outside transaction');
+        }),
+      },
+      $transaction: async (
+        callback: (transaction: unknown) => Promise<unknown>,
+      ) => {
+        const transaction = {
+          user: {
+            findUnique: async ({ where }: { where: { id: string } }) => {
+              if (where.id !== 'target')
+                return {
+                  status: AccountStatus.APPROVED,
+                  systemRole: SystemRole.ADMIN,
+                };
+              const snapshot = { id: state.id, status: state.status };
+              if (++readers === 2) release();
+              await gate;
+              return snapshot;
+            },
+            updateMany: async ({
+              where,
+              data,
+            }: {
+              where: { status: string };
+              data: Record<string, unknown>;
+            }) => {
+              updates.push({ where, data });
+              if (state.status !== where.status) return { count: 0 };
+              state = { ...state, ...data };
+              return { count: 1 };
+            },
+          },
+        };
+        clients.push(transaction);
+        return callback(transaction);
+      },
+    };
+    const prisma = root as unknown as PrismaService;
+    const service = new AuthService(
+      prisma,
+      {} as PasswordService,
+      {} as JwtService,
+      new TableActorsService(prisma),
+    );
+    const results = await Promise.allSettled([
+      service.review('target', 'reviewer-a', {
+        decision: 'APPROVED',
+        note: 'A',
+      }),
+      service.review('target', 'reviewer-b', {
+        decision: 'REJECTED',
+        note: 'B',
+      }),
+    ]);
+    expect(readers).toBe(2);
+    expect(clients[0]).not.toBe(clients[1]);
+    expect(updates).toHaveLength(2);
+    expect(
+      results.filter((result) => result.status === 'fulfilled'),
+    ).toHaveLength(1);
+    expect(
+      results.find((result) => result.status === 'rejected'),
+    ).toMatchObject({
+      reason: { response: { code: 'REGISTRATION_REVIEW_CONFLICT' } },
+    });
+    const winner = results.findIndex((result) => result.status === 'fulfilled');
+    expect(state).toMatchObject({
+      status: winner === 0 ? 'APPROVED' : 'REJECTED',
+      reviewedById: winner === 0 ? 'reviewer-a' : 'reviewer-b',
+      reviewNote: winner === 0 ? 'A' : 'B',
+      reviewedAt: expect.any(Date),
+    });
+    expect(root.user.findUnique).not.toHaveBeenCalled();
+    expect(root.user.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('increments rather than restoring a stale authVersion on concurrent logouts', async () => {
+    let authVersion = 7;
+    const updateMany = jest.fn(async ({ data }) => {
+      authVersion += data.authVersion.increment;
+      return { count: 1 };
+    });
+    const service = new AuthService(
+      { user: { updateMany } } as unknown as PrismaService,
+      {} as PasswordService,
+      {} as JwtService,
+      {} as TableActorsService,
+    );
+    await Promise.all([service.logout('user'), service.logout('user')]);
+    expect(authVersion).toBe(9);
+    expect(updateMany).toHaveBeenCalledTimes(2);
+  });
 });

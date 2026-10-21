@@ -9,7 +9,7 @@ export const PASSWORD_MIN_LENGTH = 12;
 export class PasswordService {
   hash(password: string): Promise<string> {
     if (
-      password.length < PASSWORD_MIN_LENGTH ||
+      Array.from(password).length < PASSWORD_MIN_LENGTH ||
       Buffer.byteLength(password, 'utf8') > 72
     ) {
       invalidRegistration(

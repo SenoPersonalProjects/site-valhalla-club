@@ -71,10 +71,13 @@ describe('AuthGuard', () => {
   );
   it.each([
     { sub: '' },
+    { sub: '   ' },
     { sub: 3 },
     { ver: -1 },
     { ver: 0.5 },
     { ver: '3' },
+    { ver: null },
+    { ver: Number.MAX_SAFE_INTEGER + 1 },
     { type: 'refresh' },
   ])('rejects invalid claim shape %j', async (override) => {
     const token = jwt.sign({
@@ -100,6 +103,32 @@ describe('AuthGuard', () => {
         context({ authorization: `Bearer ${token}` }).execution,
       ),
     ).rejects.toMatchObject({ response: { code: 'AUTH_TOKEN_INVALID' } });
+  });
+  it('rejects unsigned alg=none tokens instead of trusting their payload', async () => {
+    const token = jwt.sign(
+      { sub: 'real-user', ver: 3, type: 'access' },
+      { algorithm: 'none' },
+    );
+    await expect(
+      guard.canActivate(
+        context({ authorization: `Bearer ${token}` }).execution,
+      ),
+    ).rejects.toMatchObject({ response: { code: 'AUTH_TOKEN_INVALID' } });
+    expect(findUnique).not.toHaveBeenCalled();
+  });
+  it('rejects an overflowing exp even when a malformed JSON payload has a valid signature', async () => {
+    const signer = new JwtService({
+      secret: 'unit-test-only-secret-at-least-32-bytes',
+    });
+    const token = signer.sign(
+      '{"sub":"real-user","ver":3,"type":"access","exp":1e309}',
+    );
+    await expect(
+      guard.canActivate(
+        context({ authorization: `Bearer ${token}` }).execution,
+      ),
+    ).rejects.toMatchObject({ response: { code: 'AUTH_TOKEN_INVALID' } });
+    expect(findUnique).not.toHaveBeenCalled();
   });
   it('does not swallow persistence failures as credential errors', async () => {
     const error = new Error('database unavailable');
