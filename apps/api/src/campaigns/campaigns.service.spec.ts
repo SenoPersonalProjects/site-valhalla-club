@@ -2,6 +2,7 @@ import { ApprovalStatus, CampaignStatus } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { TableActorsService } from '../tables/table-actors.service';
 import { CampaignsService } from './campaigns.service';
+import { TableRulesService } from '../tables/table-rules.service';
 
 describe('CampaignsService', () => {
   type RepositoryMethod = (args: unknown) => Promise<unknown>;
@@ -30,6 +31,7 @@ describe('CampaignsService', () => {
   const service = new CampaignsService(
     prisma,
     actorMethods as unknown as TableActorsService,
+    new TableRulesService(prisma),
   );
 
   const campaign = {
@@ -52,6 +54,11 @@ describe('CampaignsService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    runTransaction.mockImplementation(
+      async (operation: (client: PrismaService) => Promise<unknown>) =>
+        operation(prisma),
+    );
+    campaignRepository.count.mockResolvedValue(0);
     actorMethods.assertMaster.mockResolvedValue();
     actorMethods.assertAdministrator.mockResolvedValue();
     actorMethods.assertCanManage.mockResolvedValue();
@@ -81,6 +88,200 @@ describe('CampaignsService', () => {
       title: 'Crônicas do Norte',
       description: 'Campanha semanal',
     });
+    expect(campaignRepository.count).not.toHaveBeenCalled();
+    expect(runTransaction).not.toHaveBeenCalled();
+  });
+
+  it.each([0, 1])('publishes with %i other active campaigns', async (count) => {
+    campaignRepository.findUnique.mockResolvedValue({
+      ...campaign,
+      approvalStatus: ApprovalStatus.APPROVED,
+    });
+    campaignRepository.count.mockResolvedValue(count);
+    await service.publish('campaign-1', 'master-1');
+    expect(campaignRepository.count).toHaveBeenCalledWith({
+      where: {
+        masterId: 'master-1',
+        status: CampaignStatus.ACTIVE,
+        id: { not: 'campaign-1' },
+      },
+    });
+    expect(campaignRepository.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { status: CampaignStatus.ACTIVE } }),
+    );
+    expect(runTransaction).toHaveBeenCalledWith(expect.any(Function), {
+      isolationLevel: 'Serializable',
+    });
+  });
+
+  it.each(['master-1', 'admin-1'])(
+    'rejects a third active campaign even for %s',
+    async (actorId) => {
+      campaignRepository.findUnique.mockResolvedValue({
+        ...campaign,
+        approvalStatus: ApprovalStatus.APPROVED,
+      });
+      campaignRepository.count.mockResolvedValue(2);
+      await expect(
+        service.publish('campaign-1', actorId),
+      ).rejects.toMatchObject({
+        response: { code: 'CAMPAIGN_ACTIVE_LIMIT_REACHED' },
+      });
+      expect(campaignRepository.update).not.toHaveBeenCalled();
+    },
+  );
+
+  it('republishes ACTIVE idempotently without renewing the inactivity baseline or counting quota again', async () => {
+    const active = {
+      ...campaign,
+      status: CampaignStatus.ACTIVE,
+      approvalStatus: ApprovalStatus.APPROVED,
+      updatedAt: new Date('2026-09-01T12:00:00Z'),
+    };
+    campaignRepository.findUnique.mockResolvedValue(active);
+    campaignRepository.count.mockResolvedValue(2);
+    expect(await service.publish('campaign-1', 'master-1')).toBe(active);
+    expect(active.updatedAt).toEqual(new Date('2026-09-01T12:00:00Z'));
+    expect(actorMethods.assertCanManage).toHaveBeenCalledWith(
+      'master-1',
+      'master-1',
+    );
+    expect(campaignRepository.count).not.toHaveBeenCalled();
+    expect(campaignRepository.update).not.toHaveBeenCalled();
+  });
+
+  it('still checks authorization before an ACTIVE publication no-op', async () => {
+    campaignRepository.findUnique.mockResolvedValue({
+      ...campaign,
+      status: CampaignStatus.ACTIVE,
+      approvalStatus: ApprovalStatus.APPROVED,
+    });
+    actorMethods.assertCanManage.mockRejectedValueOnce(new Error('denied'));
+    await expect(service.publish('campaign-1', 'other-user')).rejects.toThrow(
+      'denied',
+    );
+    expect(campaignRepository.update).not.toHaveBeenCalled();
+  });
+
+  it.each([0, 1, 2])(
+    'keeps the active quota for INACTIVE publication with %i other ACTIVE campaigns',
+    async (count) => {
+      campaignRepository.findUnique.mockResolvedValue({
+        ...campaign,
+        status: CampaignStatus.INACTIVE,
+        approvalStatus: ApprovalStatus.APPROVED,
+      });
+      campaignRepository.count.mockResolvedValue(count);
+      if (count < 2) {
+        await service.publish('campaign-1', 'master-1');
+        expect(campaignRepository.update).toHaveBeenCalledWith(
+          expect.objectContaining({ data: { status: CampaignStatus.ACTIVE } }),
+        );
+      } else {
+        await expect(
+          service.publish('campaign-1', 'master-1'),
+        ).rejects.toMatchObject({
+          response: { code: 'CAMPAIGN_ACTIVE_LIMIT_REACHED' },
+        });
+        expect(campaignRepository.update).not.toHaveBeenCalled();
+      }
+      expect(campaignRepository.count).toHaveBeenCalledWith({
+        where: {
+          masterId: 'master-1',
+          status: CampaignStatus.ACTIVE,
+          id: { not: 'campaign-1' },
+        },
+      });
+    },
+  );
+
+  it('still checks approval before an ACTIVE publication no-op', async () => {
+    campaignRepository.findUnique.mockResolvedValue({
+      ...campaign,
+      status: CampaignStatus.ACTIVE,
+    });
+    await expect(
+      service.publish('campaign-1', 'master-1'),
+    ).rejects.toMatchObject({ response: { code: 'CAMPAIGN_NOT_APPROVED' } });
+    expect(campaignRepository.update).not.toHaveBeenCalled();
+  });
+
+  it.each([undefined, 'Aprovado', 'Outra nota'])(
+    'does not renew ACTIVE + APPROVED timestamps on repeated approval with note %s',
+    async (note) => {
+      const active = {
+        ...campaign,
+        status: CampaignStatus.ACTIVE,
+        approvalStatus: ApprovalStatus.APPROVED,
+        updatedAt: new Date('2026-09-01T12:00:00Z'),
+        reviewedAt: new Date('2026-08-31T12:00:00Z'),
+        reviewedById: 'original-admin',
+        reviewNote: 'Aprovado',
+      };
+      campaignRepository.findUnique.mockResolvedValue(active);
+      const result = await service.review('campaign-1', 'admin-1', {
+        decision: ApprovalStatus.APPROVED,
+        note,
+      });
+      expect(actorMethods.assertAdministrator).toHaveBeenCalledWith('admin-1');
+      expect(result).toBe(active);
+      expect(result.updatedAt).toEqual(new Date('2026-09-01T12:00:00Z'));
+      expect(result.reviewedById).toBe('original-admin');
+      expect(result.reviewedAt).toEqual(new Date('2026-08-31T12:00:00Z'));
+      expect(result.reviewNote).toBe('Aprovado');
+      expect(campaignRepository.update).not.toHaveBeenCalled();
+    },
+  );
+
+  it('still checks administrative access before a repeated approval no-op', async () => {
+    actorMethods.assertAdministrator.mockRejectedValueOnce(new Error('denied'));
+    await expect(
+      service.review('campaign-1', 'master-1', {
+        decision: ApprovalStatus.APPROVED,
+      }),
+    ).rejects.toThrow('denied');
+    expect(campaignRepository.findUnique).not.toHaveBeenCalled();
+    expect(campaignRepository.update).not.toHaveBeenCalled();
+  });
+
+  it('still rejects and unpublishes an ACTIVE approved campaign', async () => {
+    campaignRepository.findUnique.mockResolvedValue({
+      ...campaign,
+      status: CampaignStatus.ACTIVE,
+      approvalStatus: ApprovalStatus.APPROVED,
+    });
+    await service.review('campaign-1', 'admin-1', {
+      decision: ApprovalStatus.REJECTED,
+      note: 'Correção necessária',
+    });
+    expect(campaignRepository.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: CampaignStatus.INACTIVE,
+          approvalStatus: ApprovalStatus.REJECTED,
+        }),
+      }),
+    );
+  });
+
+  it('ignores draft, inactive and archived campaigns in the active quota', async () => {
+    const statuses = [
+      CampaignStatus.ACTIVE,
+      CampaignStatus.DRAFT,
+      CampaignStatus.DRAFT,
+      CampaignStatus.INACTIVE,
+      CampaignStatus.ARCHIVED,
+    ];
+    campaignRepository.findUnique.mockResolvedValue({
+      ...campaign,
+      approvalStatus: ApprovalStatus.APPROVED,
+    });
+    campaignRepository.count.mockImplementation(async (input: unknown) => {
+      const { where } = input as { where: { status: string } };
+      return statuses.filter((status) => status === where.status).length;
+    });
+    await service.publish('campaign-1', 'master-1');
+    expect(campaignRepository.update).toHaveBeenCalled();
   });
 
   it('queries only public fields with deterministic pagination', async () => {

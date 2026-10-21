@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { AccountStatus, ClubRole, SystemRole } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
+import { Prisma } from '../generated/prisma/client';
 import { forbidden, notFound } from './table-domain.errors';
 
 @Injectable()
@@ -84,8 +85,11 @@ export class TableActorsService {
     }
   }
 
-  async assertActiveGameSystem(gameSystemId: string): Promise<void> {
-    const gameSystem = await this.prisma.gameSystem.findUnique({
+  async assertActiveGameSystem(
+    gameSystemId: string,
+    client: Pick<Prisma.TransactionClient, 'gameSystem'> = this.prisma,
+  ): Promise<void> {
+    const gameSystem = await client.gameSystem.findUnique({
       where: { id: gameSystemId },
       select: { active: true },
     });

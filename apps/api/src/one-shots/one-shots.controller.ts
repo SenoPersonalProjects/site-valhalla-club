@@ -14,6 +14,7 @@ import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { CurrentUserId } from '../common/http/current-user-id.decorator';
 import { ChangeOneShotStatusDto } from './dto/change-one-shot-status.dto';
 import { CreateOneShotDto } from './dto/create-one-shot.dto';
+import { CorrectOneShotDto } from './dto/correct-one-shot.dto';
 import { ReviewOneShotDto } from './dto/review-one-shot.dto';
 import { UpdateOneShotDto } from './dto/update-one-shot.dto';
 import { OneShotsService } from './one-shots.service';
@@ -73,6 +74,15 @@ export class OneShotsController {
 @Controller('admin/one-shots')
 export class AdminOneShotsController {
   constructor(private readonly oneShotsService: OneShotsService) {}
+
+  @Patch(':id/correction')
+  correct(
+    @Param('id') id: string,
+    @CurrentUserId() userId: string,
+    @Body() dto: CorrectOneShotDto,
+  ) {
+    return this.oneShotsService.correct(id, userId, dto);
+  }
 
   @Patch(':id/approval')
   review(

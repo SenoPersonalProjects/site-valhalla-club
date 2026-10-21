@@ -1,6 +1,7 @@
 import { AccountStatus, ClubRole, SystemRole } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { TableActorsService } from './table-actors.service';
+import { Prisma } from '../generated/prisma/client';
 
 describe('TableActorsService', () => {
   const userRepository = { findUnique: jest.fn() };
@@ -105,6 +106,45 @@ describe('TableActorsService', () => {
       service.assertActiveGameSystem('system-1'),
     ).rejects.toMatchObject({
       response: { code: 'GAME_SYSTEM_INACTIVE' },
+    });
+  });
+
+  it.each([true, false, null])(
+    'uses only the supplied transaction for game system activity %s',
+    async (active) => {
+      const findUnique = jest
+        .fn()
+        .mockResolvedValue(active === null ? null : { active });
+      const tx = {
+        gameSystem: { findUnique },
+      } as unknown as Prisma.TransactionClient;
+      const result = service.assertActiveGameSystem('system-1', tx);
+      if (active) await expect(result).resolves.toBeUndefined();
+      else
+        await expect(result).rejects.toMatchObject({
+          response: {
+            code:
+              active === null
+                ? 'GAME_SYSTEM_NOT_FOUND'
+                : 'GAME_SYSTEM_INACTIVE',
+          },
+        });
+      expect(findUnique).toHaveBeenCalledWith({
+        where: { id: 'system-1' },
+        select: { active: true },
+      });
+      expect(gameSystemRepository.findUnique).not.toHaveBeenCalled();
+    },
+  );
+
+  it('keeps the root client as the default for other callers', async () => {
+    gameSystemRepository.findUnique.mockResolvedValue({ active: true });
+    await expect(
+      service.assertActiveGameSystem('system-1'),
+    ).resolves.toBeUndefined();
+    expect(gameSystemRepository.findUnique).toHaveBeenCalledWith({
+      where: { id: 'system-1' },
+      select: { active: true },
     });
   });
 });
