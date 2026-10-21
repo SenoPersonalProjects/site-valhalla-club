@@ -100,6 +100,13 @@ Ambientes gratuitos que dormem fazem catch-up no startup quando reiniciam;
 não há execução enquanto a API dorme. Uma falha gera evento seguro de log e
 nova tentativa no próximo ciclo/startup, sem expor detalhes de conexão.
 
+Reconciliação e mutações de Session de Campaign executam leitura e escrita em
+transações Serializable, com retry completo e nova avaliação de estado/predicado
+em conflito. Se a reconciliação serializar antes da criação/remarcação, a sessão
+pode ser persistida na Campaign INACTIVE conforme as regras existentes. Não há
+auto-reativação: é necessária publicação explícita, com aprovação e quota.
+Nenhum update artificial de `Campaign.updatedAt` é usado como lock.
+
 ## Sessões
 
 | Método   | Rota                              | Descrição                                |

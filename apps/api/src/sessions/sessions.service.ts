@@ -3,6 +3,7 @@ import { CampaignStatus, SessionStatus } from '../generated/prisma/enums';
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { TableActorsService } from '../tables/table-actors.service';
+import { TableRulesService } from '../tables/table-rules.service';
 import { badRequest, conflict, notFound } from '../tables/table-domain.errors';
 import { ChangeSessionStatusDto } from './dto/change-session-status.dto';
 import { CreateSessionDto } from './dto/create-session.dto';
@@ -42,6 +43,7 @@ export class SessionsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly actors: TableActorsService,
+    private readonly rules: TableRulesService,
   ) {}
 
   async createForCampaign(
@@ -49,34 +51,36 @@ export class SessionsService {
     actorId: string,
     dto: CreateSessionDto,
   ) {
-    const campaign = await this.prisma.campaign.findUnique({
-      where: { id: campaignId },
-      select: { masterId: true, status: true },
-    });
+    return this.rules.serializable(async (transaction) => {
+      const campaign = await transaction.campaign.findUnique({
+        where: { id: campaignId },
+        select: { masterId: true, status: true },
+      });
 
-    if (!campaign) {
-      throw notFound('CAMPAIGN_NOT_FOUND', 'Campanha não encontrada');
-    }
+      if (!campaign) {
+        throw notFound('CAMPAIGN_NOT_FOUND', 'Campanha não encontrada');
+      }
 
-    await this.actors.assertCanManage(campaign.masterId, actorId);
+      await this.actors.assertCanManage(campaign.masterId, actorId);
 
-    if (campaign.status === CampaignStatus.ARCHIVED) {
-      throw conflict(
-        'CAMPAIGN_ARCHIVED',
-        'Não é possível adicionar sessões a uma campanha arquivada',
-      );
-    }
+      if (campaign.status === CampaignStatus.ARCHIVED) {
+        throw conflict(
+          'CAMPAIGN_ARCHIVED',
+          'Não é possível adicionar sessões a uma campanha arquivada',
+        );
+      }
 
-    const scheduledAt = this.parseFutureDate(dto.scheduledAt);
+      const scheduledAt = this.parseFutureDate(dto.scheduledAt);
 
-    return this.prisma.session.create({
-      data: {
-        campaignId,
-        oneShotId: null,
-        title: this.normalizeOptionalText(dto.title),
-        scheduledAt,
-      },
-      include: sessionDetails,
+      return transaction.session.create({
+        data: {
+          campaignId,
+          oneShotId: null,
+          title: this.normalizeOptionalText(dto.title),
+          scheduledAt,
+        },
+        include: sessionDetails,
+      });
     });
   }
 
@@ -106,112 +110,120 @@ export class SessionsService {
   }
 
   async update(id: string, actorId: string, dto: UpdateSessionDto) {
-    const session = await this.getByIdOrThrow(id);
-    await this.actors.assertCanManage(this.ownerId(session), actorId);
-    this.assertCampaignSession(session);
+    return this.rules.serializable(async (transaction) => {
+      const session = await this.getByIdOrThrow(id, transaction);
+      await this.actors.assertCanManage(this.ownerId(session), actorId);
+      this.assertCampaignSession(session);
 
-    if (session.status !== SessionStatus.SCHEDULED) {
-      throw conflict(
-        'SESSION_CLOSED',
-        'Somente sessões agendadas podem ser alteradas',
-      );
-    }
+      if (session.status !== SessionStatus.SCHEDULED) {
+        throw conflict(
+          'SESSION_CLOSED',
+          'Somente sessões agendadas podem ser alteradas',
+        );
+      }
 
-    if (dto.title === undefined && dto.scheduledAt === undefined) {
-      throw badRequest(
-        'SESSION_UPDATE_EMPTY',
-        'Informe ao menos um campo para atualizar',
-      );
-    }
+      if (dto.title === undefined && dto.scheduledAt === undefined) {
+        throw badRequest(
+          'SESSION_UPDATE_EMPTY',
+          'Informe ao menos um campo para atualizar',
+        );
+      }
 
-    return this.prisma.session.update({
-      where: { id },
-      data: {
-        ...(dto.title !== undefined
-          ? { title: this.normalizeOptionalText(dto.title) }
-          : {}),
-        ...(dto.scheduledAt
-          ? { scheduledAt: this.parseFutureDate(dto.scheduledAt) }
-          : {}),
-      },
-      include: sessionDetails,
+      return transaction.session.update({
+        where: { id },
+        data: {
+          ...(dto.title !== undefined
+            ? { title: this.normalizeOptionalText(dto.title) }
+            : {}),
+          ...(dto.scheduledAt
+            ? { scheduledAt: this.parseFutureDate(dto.scheduledAt) }
+            : {}),
+        },
+        include: sessionDetails,
+      });
     });
   }
 
   async changeStatus(id: string, actorId: string, dto: ChangeSessionStatusDto) {
-    const session = await this.getByIdOrThrow(id);
-    await this.actors.assertCanManage(this.ownerId(session), actorId);
-    this.assertCampaignSession(session);
+    return this.rules.serializable(async (transaction) => {
+      const session = await this.getByIdOrThrow(id, transaction);
+      await this.actors.assertCanManage(this.ownerId(session), actorId);
+      this.assertCampaignSession(session);
 
-    if (session.status !== SessionStatus.SCHEDULED) {
-      throw conflict(
-        'SESSION_STATUS_TRANSITION_INVALID',
-        `A sessão não pode passar de ${session.status} para ${dto.status}`,
-      );
-    }
+      if (session.status !== SessionStatus.SCHEDULED) {
+        throw conflict(
+          'SESSION_STATUS_TRANSITION_INVALID',
+          `A sessão não pode passar de ${session.status} para ${dto.status}`,
+        );
+      }
 
-    if (
-      dto.status !== SessionStatus.CANCELLED &&
-      dto.status !== SessionStatus.COMPLETED
-    ) {
-      throw badRequest(
-        'SESSION_STATUS_INVALID',
-        'Uma sessão agendada pode apenas ser cancelada ou concluída',
-      );
-    }
+      if (
+        dto.status !== SessionStatus.CANCELLED &&
+        dto.status !== SessionStatus.COMPLETED
+      ) {
+        throw badRequest(
+          'SESSION_STATUS_INVALID',
+          'Uma sessão agendada pode apenas ser cancelada ou concluída',
+        );
+      }
 
-    const cancellationReason = this.normalizeOptionalText(dto.reason);
-    if (dto.status === SessionStatus.CANCELLED && !cancellationReason) {
-      throw badRequest(
-        'CANCELLATION_REASON_REQUIRED',
-        'Informe o motivo do cancelamento',
-      );
-    }
+      const cancellationReason = this.normalizeOptionalText(dto.reason);
+      if (dto.status === SessionStatus.CANCELLED && !cancellationReason) {
+        throw badRequest(
+          'CANCELLATION_REASON_REQUIRED',
+          'Informe o motivo do cancelamento',
+        );
+      }
 
-    if (
-      dto.status === SessionStatus.COMPLETED &&
-      session.scheduledAt > new Date()
-    ) {
-      throw conflict(
-        'SESSION_NOT_STARTED',
-        'Uma sessão futura não pode ser concluída',
-      );
-    }
+      if (
+        dto.status === SessionStatus.COMPLETED &&
+        session.scheduledAt > new Date()
+      ) {
+        throw conflict(
+          'SESSION_NOT_STARTED',
+          'Uma sessão futura não pode ser concluída',
+        );
+      }
 
-    const sessionUpdate: Prisma.SessionUpdateInput = {
-      status: dto.status,
-      cancelledAt: dto.status === SessionStatus.CANCELLED ? new Date() : null,
-      cancellationReason:
-        dto.status === SessionStatus.CANCELLED ? cancellationReason : null,
-    };
+      const sessionUpdate: Prisma.SessionUpdateInput = {
+        status: dto.status,
+        cancelledAt: dto.status === SessionStatus.CANCELLED ? new Date() : null,
+        cancellationReason:
+          dto.status === SessionStatus.CANCELLED ? cancellationReason : null,
+      };
 
-    return this.prisma.session.update({
-      where: { id },
-      data: sessionUpdate,
-      include: sessionDetails,
+      return transaction.session.update({
+        where: { id },
+        data: sessionUpdate,
+        include: sessionDetails,
+      });
     });
   }
 
   async remove(id: string, actorId: string): Promise<void> {
-    const session = await this.getByIdOrThrow(id);
-    await this.actors.assertCanManage(this.ownerId(session), actorId);
+    return this.rules.serializable(async (transaction) => {
+      const session = await this.getByIdOrThrow(id, transaction);
+      await this.actors.assertCanManage(this.ownerId(session), actorId);
 
-    if (session.oneShotId) {
-      throw conflict(
-        'ONE_SHOT_SESSION_DELETE_NOT_ALLOWED',
-        'A sessão de um one-shot só pode ser removida com o próprio one-shot',
+      if (session.oneShotId) {
+        throw conflict(
+          'ONE_SHOT_SESSION_DELETE_NOT_ALLOWED',
+          'A sessão de um one-shot só pode ser removida com o próprio one-shot',
+        );
+      }
+
+      const hasHistory = Object.values(session._count).some(
+        (count) => count > 0,
       );
-    }
+      if (session.status !== SessionStatus.SCHEDULED || hasHistory) {
+        throw conflict(
+          'SESSION_DELETE_NOT_ALLOWED',
+          'Somente sessões agendadas e sem histórico podem ser removidas',
+        );
+      }
 
-    const hasHistory = Object.values(session._count).some((count) => count > 0);
-    if (session.status !== SessionStatus.SCHEDULED || hasHistory) {
-      throw conflict(
-        'SESSION_DELETE_NOT_ALLOWED',
-        'Somente sessões agendadas e sem histórico podem ser removidas',
-      );
-    }
-
-    await this.prisma.session.delete({ where: { id } });
+      await transaction.session.delete({ where: { id } });
+    });
   }
 
   private assertCampaignSession(session: { oneShotId: string | null }): void {
@@ -223,8 +235,11 @@ export class SessionsService {
     }
   }
 
-  private async getByIdOrThrow(id: string) {
-    const session = await this.prisma.session.findUnique({
+  private async getByIdOrThrow(
+    id: string,
+    client: Prisma.TransactionClient = this.prisma,
+  ) {
+    const session = await client.session.findUnique({
       where: { id },
       include: sessionDetails,
     });

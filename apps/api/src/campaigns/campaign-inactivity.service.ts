@@ -1,15 +1,17 @@
 import { Injectable, OnApplicationBootstrap } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { CampaignStatus, SessionStatus } from '../generated/prisma/enums';
-import { PrismaService } from '../prisma/prisma.service';
 import { StructuredLoggerService } from '../observability/structured-logger.service';
-import { TABLE_RULE_WINDOW_MS } from '../tables/table-rules.service';
+import {
+  TableRulesService,
+  TABLE_RULE_WINDOW_MS,
+} from '../tables/table-rules.service';
 
 @Injectable()
 export class CampaignInactivityService implements OnApplicationBootstrap {
   private running = false;
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly rules: TableRulesService,
     private readonly logger: StructuredLoggerService,
   ) {}
 
@@ -36,18 +38,20 @@ export class CampaignInactivityService implements OnApplicationBootstrap {
 
   reconcile(now = new Date()) {
     const cutoff = new Date(now.getTime() - TABLE_RULE_WINDOW_MS);
-    return this.prisma.campaign.updateMany({
-      where: {
-        status: CampaignStatus.ACTIVE,
-        updatedAt: { lt: cutoff },
-        sessions: {
-          none: {
-            status: { not: SessionStatus.CANCELLED },
-            scheduledAt: { gte: cutoff },
+    return this.rules.serializable(async (transaction) =>
+      transaction.campaign.updateMany({
+        where: {
+          status: CampaignStatus.ACTIVE,
+          updatedAt: { lt: cutoff },
+          sessions: {
+            none: {
+              status: { not: SessionStatus.CANCELLED },
+              scheduledAt: { gte: cutoff },
+            },
           },
         },
-      },
-      data: { status: CampaignStatus.INACTIVE },
-    });
+        data: { status: CampaignStatus.INACTIVE },
+      }),
+    );
   }
 }

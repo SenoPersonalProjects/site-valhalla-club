@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { TableActorsService } from '../tables/table-actors.service';
 import { SessionsService } from './sessions.service';
+import { TableRulesService } from '../tables/table-rules.service';
 
 describe('SessionsService', () => {
   type RepositoryMethod = (args: unknown) => Promise<unknown>;
@@ -38,6 +39,7 @@ describe('SessionsService', () => {
   const service = new SessionsService(
     prisma,
     actorMethods as unknown as TableActorsService,
+    new TableRulesService(prisma),
   );
 
   const futureDate = new Date(Date.now() + 86_400_000);
@@ -66,6 +68,9 @@ describe('SessionsService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    runTransaction.mockImplementation(async (operation: unknown) =>
+      (operation as (client: PrismaService) => Promise<unknown>)(prisma),
+    );
     actorMethods.assertCanManage.mockResolvedValue();
   });
 
@@ -111,7 +116,9 @@ describe('SessionsService', () => {
       }),
     );
     expect(campaignRepository.update).not.toHaveBeenCalled();
-    expect(runTransaction).not.toHaveBeenCalled();
+    expect(runTransaction).toHaveBeenCalledWith(expect.any(Function), {
+      isolationLevel: 'Serializable',
+    });
   });
 
   it.each([
@@ -140,7 +147,9 @@ describe('SessionsService', () => {
       });
       expect(sessionRepository.update).not.toHaveBeenCalled();
       expect(oneShotRepository.update).not.toHaveBeenCalled();
-      expect(runTransaction).not.toHaveBeenCalled();
+      expect(runTransaction).toHaveBeenCalledWith(expect.any(Function), {
+        isolationLevel: 'Serializable',
+      });
     },
   );
 
@@ -173,7 +182,9 @@ describe('SessionsService', () => {
       });
       expect(sessionRepository.update).not.toHaveBeenCalled();
       expect(oneShotRepository.update).not.toHaveBeenCalled();
-      expect(runTransaction).not.toHaveBeenCalled();
+      expect(runTransaction).toHaveBeenCalledWith(expect.any(Function), {
+        isolationLevel: 'Serializable',
+      });
     },
   );
 
@@ -208,7 +219,9 @@ describe('SessionsService', () => {
           data: expect.objectContaining({ status }),
         }),
       );
-      expect(runTransaction).not.toHaveBeenCalled();
+      expect(runTransaction).toHaveBeenCalledWith(expect.any(Function), {
+        isolationLevel: 'Serializable',
+      });
     },
   );
 
@@ -233,7 +246,9 @@ describe('SessionsService', () => {
       },
     );
     expect(sessionRepository.delete).not.toHaveBeenCalled();
-    expect(runTransaction).not.toHaveBeenCalled();
+    expect(runTransaction).toHaveBeenCalledWith(expect.any(Function), {
+      isolationLevel: 'Serializable',
+    });
   });
 
   it('does not complete a future session', async () => {
@@ -246,5 +261,39 @@ describe('SessionsService', () => {
     ).rejects.toMatchObject({
       response: { code: 'SESSION_NOT_STARTED' },
     });
+  });
+
+  it('keeps findOne read-only on the default client', async () => {
+    sessionRepository.findUnique.mockResolvedValue(campaignSession);
+    expect(await service.findOne('session-1', 'master-1')).toBe(
+      campaignSession,
+    );
+    expect(runTransaction).not.toHaveBeenCalled();
+    expect(sessionRepository.update).not.toHaveBeenCalled();
+  });
+
+  it('keeps findForCampaign read-only', async () => {
+    campaignRepository.findUnique.mockResolvedValue({ masterId: 'master-1' });
+    sessionRepository.findMany.mockResolvedValue([campaignSession]);
+    expect(await service.findForCampaign('campaign-1', 'master-1')).toEqual([
+      campaignSession,
+    ]);
+    expect(runTransaction).not.toHaveBeenCalled();
+    expect(campaignRepository.update).not.toHaveBeenCalled();
+  });
+
+  it('does not add an uncancel transition', async () => {
+    sessionRepository.findUnique.mockResolvedValue({
+      ...campaignSession,
+      status: SessionStatus.CANCELLED,
+    });
+    await expect(
+      service.changeStatus('session-1', 'master-1', {
+        status: SessionStatus.SCHEDULED,
+      }),
+    ).rejects.toMatchObject({
+      response: { code: 'SESSION_STATUS_TRANSITION_INVALID' },
+    });
+    expect(sessionRepository.update).not.toHaveBeenCalled();
   });
 });

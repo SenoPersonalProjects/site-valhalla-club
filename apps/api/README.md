@@ -61,6 +61,13 @@ estados e não introduz escrita em GET. Ambientes que dormem fazem catch-up ao
 reiniciar; falhas são logadas sem secrets e tentadas novamente no próximo ciclo.
 Não depende de cron do sistema operacional.
 
+Reconciliação e mutações de Session de Campaign usam transações Serializable;
+conflitos repetem a operação completa com nova leitura de estado/predicado.
+Não há auto-reativação: se a reconciliação serializar primeiro, uma sessão pode
+ser adicionada/remarcada na Campaign INACTIVE, como já permitido; reativá-la
+exige publicação explícita, aprovação e quota. Não há escrita artificial em
+`Campaign.updatedAt` para coordenar essas operações.
+
 As regras permanecem em NestJS/Prisma, sem mudança de schema/migrations ou SQL
 específico. Testes de concorrência usam doubles de transações; a validação de
 isolamento e desempenho em PostgreSQL/MySQL reais continua sendo revisão de

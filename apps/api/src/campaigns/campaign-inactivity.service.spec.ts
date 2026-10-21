@@ -3,23 +3,51 @@ import { CampaignStatus, SessionStatus } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { StructuredLoggerService } from '../observability/structured-logger.service';
 import { CampaignInactivityService } from './campaign-inactivity.service';
-import { TABLE_RULE_WINDOW_MS } from '../tables/table-rules.service';
+import {
+  TableRulesService,
+  TABLE_RULE_WINDOW_MS,
+} from '../tables/table-rules.service';
 
 describe('CampaignInactivityService', () => {
   const now = new Date('2026-10-20T12:00:00Z');
   const cutoff = new Date(now.getTime() - TABLE_RULE_WINDOW_MS);
   const old = new Date(cutoff.getTime() - 1);
   const updateMany = jest.fn();
+  const rootUpdateMany = jest.fn(() => {
+    throw new Error('root update forbidden');
+  });
+  const transaction = jest.fn();
+  const tx = {
+    campaign: { updateMany },
+  } as unknown as Prisma.TransactionClient;
+  const rules = new TableRulesService({
+    campaign: { updateMany: rootUpdateMany },
+    $transaction: transaction,
+  } as unknown as PrismaService);
   const logger = { info: jest.fn(), error: jest.fn() };
   const service = new CampaignInactivityService(
-    { campaign: { updateMany } } as unknown as PrismaService,
+    rules,
     logger as unknown as StructuredLoggerService,
   );
-  beforeEach(() => jest.resetAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    transaction
+      .mockReset()
+      .mockImplementation(
+        async (
+          operation: (client: Prisma.TransactionClient) => Promise<unknown>,
+        ) => operation(tx),
+      );
+    updateMany.mockReset();
+  });
 
   it('uses a single typed updateMany with the status, baseline and session predicates', async () => {
     updateMany.mockResolvedValue({ count: 1 });
     await service.reconcile(now);
+    expect(transaction).toHaveBeenCalledWith(expect.any(Function), {
+      isolationLevel: 'Serializable',
+    });
+    expect(rootUpdateMany).not.toHaveBeenCalled();
     expect(updateMany).toHaveBeenCalledWith({
       where: {
         status: CampaignStatus.ACTIVE,
@@ -33,6 +61,35 @@ describe('CampaignInactivityService', () => {
       },
       data: { status: CampaignStatus.INACTIVE },
     });
+  });
+
+  it('reexecutes the inactivity predicate on a new transaction after P2034', async () => {
+    const retriedUpdate = jest.fn().mockResolvedValue({ count: 0 });
+    updateMany.mockResolvedValue({ count: 1 });
+    transaction.mockImplementationOnce(
+      async (
+        operation: (client: Prisma.TransactionClient) => Promise<unknown>,
+      ) => {
+        await operation(tx);
+        throw new Prisma.PrismaClientKnownRequestError('conflict', {
+          code: 'P2034',
+          clientVersion: '7.10.0',
+        });
+      },
+    );
+    transaction.mockImplementationOnce(
+      async (
+        operation: (client: Prisma.TransactionClient) => Promise<unknown>,
+      ) =>
+        operation({
+          campaign: { updateMany: retriedUpdate },
+        } as unknown as Prisma.TransactionClient),
+    );
+    expect(await service.reconcile(now)).toEqual({ count: 0 });
+    expect(transaction).toHaveBeenCalledTimes(2);
+    expect(updateMany).toHaveBeenCalledTimes(1);
+    expect(retriedUpdate).toHaveBeenCalledWith(updateMany.mock.calls[0][0]);
+    expect(rootUpdateMany).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -123,6 +180,29 @@ describe('CampaignInactivityService', () => {
     expect(logger.info).toHaveBeenCalledWith('campaign_inactivity_reconciled', {
       count: 2,
     });
+  });
+
+  it('logs safely after exhausting Serializable retries and tries again on the next cycle', async () => {
+    const error = new Prisma.PrismaClientKnownRequestError(
+      'private connection details',
+      { code: 'P2034', clientVersion: '7.10.0' },
+    );
+    transaction
+      .mockRejectedValueOnce(error)
+      .mockRejectedValueOnce(error)
+      .mockRejectedValueOnce(error);
+    await service.run();
+    expect(transaction).toHaveBeenCalledTimes(3);
+    expect(logger.error).toHaveBeenCalledWith(
+      'campaign_inactivity_reconciliation_failed',
+    );
+    updateMany.mockResolvedValue({ count: 0 });
+    await service.run();
+    expect(transaction).toHaveBeenCalledTimes(4);
+    expect(logger.info).toHaveBeenCalledWith('campaign_inactivity_reconciled', {
+      count: 0,
+    });
+    expect(rootUpdateMany).not.toHaveBeenCalled();
   });
 
   it('does not overlap runs and recovers after a failed run without logging secrets', async () => {
