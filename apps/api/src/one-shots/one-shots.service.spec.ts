@@ -419,7 +419,10 @@ describe('OneShotsService', () => {
       gameSystemId: 'system-2',
       scheduledAt: futureDate.toISOString(),
     });
-    expect(actorMethods.assertAdministrator).toHaveBeenCalledWith('admin-1');
+    expect(actorMethods.assertAdministrator).toHaveBeenCalledWith(
+      'admin-1',
+      prisma,
+    );
     expect(actorMethods.assertActiveGameSystem).toHaveBeenCalledWith(
       'system-2',
       prisma,
@@ -502,7 +505,9 @@ describe('OneShotsService', () => {
     ).rejects.toMatchObject({
       response: { code: 'ONE_SHOT_CORRECTION_EMPTY' },
     });
-    expect(runTransaction).not.toHaveBeenCalled();
+    expect(runTransaction).toHaveBeenCalledTimes(1);
+    expect(oneShotRepository.update).not.toHaveBeenCalled();
+    expect(sessionRepository.update).not.toHaveBeenCalled();
   });
 
   it('creates a one-shot exactly at the 30-day scheduling limit', async () => {
@@ -570,7 +575,9 @@ describe('OneShotsService', () => {
     await expect(
       service.correct('one-shot-1', 'master-1', { gameSystemId: 'system-2' }),
     ).rejects.toThrow('denied');
-    expect(runTransaction).not.toHaveBeenCalled();
+    expect(runTransaction).toHaveBeenCalledTimes(1);
+    expect(oneShotRepository.update).not.toHaveBeenCalled();
+    expect(sessionRepository.update).not.toHaveBeenCalled();
     expect(oneShotRepository.findUnique).not.toHaveBeenCalled();
   });
 });

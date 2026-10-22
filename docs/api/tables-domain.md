@@ -21,6 +21,9 @@ Testes E2E de autenticação usam Bearer real; testes isolados de domínio podem
 substituir explicitamente o guard no TestingModule, sem backdoor de produção.
 Ver [cadastro, aprovação e autenticação](auth.md). As regras de autorização de
 mesas abaixo continuam sendo verificadas pelos serviços, com papéis do banco.
+`TableActorsService` reutiliza a [camada central de autorização](roles-authorization.md).
+Guards declarativos não substituem a verificação de domínio: as mutações
+transacionais verificam o operador usando o mesmo TransactionClient da escrita.
 
 ## Regras de acesso
 

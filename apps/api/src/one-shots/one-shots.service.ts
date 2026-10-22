@@ -59,12 +59,11 @@ export class OneShotsService {
   ) {}
 
   async create(actorId: string, dto: CreateOneShotDto) {
-    await Promise.all([
-      this.actors.assertMaster(actorId),
-      this.actors.assertActiveGameSystem(dto.gameSystemId),
-    ]);
-
     return this.rules.serializable(async (transaction) => {
+      await Promise.all([
+        this.actors.assertMaster(actorId, transaction),
+        this.actors.assertActiveGameSystem(dto.gameSystemId, transaction),
+      ]);
       const scheduledAt = this.rules.parseOneShotDate(dto.session.scheduledAt);
       await this.rules.assertOneShotCapacity(
         transaction,
@@ -128,7 +127,7 @@ export class OneShotsService {
   async update(id: string, actorId: string, dto: UpdateOneShotDto) {
     return this.rules.serializable(async (transaction) => {
       const oneShot = await this.getByIdOrThrow(id, transaction);
-      await this.actors.assertCanManage(oneShot.masterId, actorId);
+      await this.actors.assertCanManage(oneShot.masterId, actorId, transaction);
 
       if (
         dto.gameSystemId !== undefined ||
@@ -204,7 +203,7 @@ export class OneShotsService {
   async remove(id: string, actorId: string): Promise<void> {
     return this.rules.serializable(async (transaction) => {
       const oneShot = await this.getByIdOrThrow(id, transaction);
-      await this.actors.assertCanManage(oneShot.masterId, actorId);
+      await this.actors.assertCanManage(oneShot.masterId, actorId, transaction);
 
       if (!oneShot.session) {
         throw conflict(
@@ -230,14 +229,14 @@ export class OneShotsService {
   }
 
   async correct(id: string, actorId: string, dto: CorrectOneShotDto) {
-    await this.actors.assertAdministrator(actorId);
-    if (dto.gameSystemId === undefined && dto.scheduledAt === undefined) {
-      throw badRequest(
-        'ONE_SHOT_CORRECTION_EMPTY',
-        'Informe sistema ou data para a correção administrativa',
-      );
-    }
     return this.rules.serializable(async (transaction) => {
+      await this.actors.assertAdministrator(actorId, transaction);
+      if (dto.gameSystemId === undefined && dto.scheduledAt === undefined) {
+        throw badRequest(
+          'ONE_SHOT_CORRECTION_EMPTY',
+          'Informe sistema ou data para a correção administrativa',
+        );
+      }
       const oneShot = await this.getByIdOrThrow(id, transaction);
       if (
         oneShot.status === OneShotStatus.CANCELLED ||
@@ -289,7 +288,7 @@ export class OneShotsService {
   async publish(id: string, actorId: string) {
     return this.rules.serializable(async (transaction) => {
       const oneShot = await this.getByIdOrThrow(id, transaction);
-      await this.actors.assertCanManage(oneShot.masterId, actorId);
+      await this.actors.assertCanManage(oneShot.masterId, actorId, transaction);
 
       if (oneShot.approvalStatus !== ApprovalStatus.APPROVED) {
         throw conflict(
@@ -326,7 +325,7 @@ export class OneShotsService {
   async changeStatus(id: string, actorId: string, dto: ChangeOneShotStatusDto) {
     return this.rules.serializable(async (transaction) => {
       const oneShot = await this.getByIdOrThrow(id, transaction);
-      await this.actors.assertCanManage(oneShot.masterId, actorId);
+      await this.actors.assertCanManage(oneShot.masterId, actorId, transaction);
 
       if (oneShot.status !== OneShotStatus.SCHEDULED) {
         throw conflict(
@@ -397,8 +396,8 @@ export class OneShotsService {
   }
 
   async review(id: string, reviewerId: string, dto: ReviewOneShotDto) {
-    await this.actors.assertAdministrator(reviewerId);
     return this.rules.serializable(async (transaction) => {
+      await this.actors.assertAdministrator(reviewerId, transaction);
       const oneShot = await this.getByIdOrThrow(id, transaction);
       const note = this.normalizeOptionalText(dto.note);
 

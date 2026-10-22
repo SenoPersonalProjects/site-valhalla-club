@@ -261,6 +261,10 @@ describe('AppController (e2e)', () => {
     { scheduledAt: 'invalid' },
   ])('validates administrative correction input %j', async (body) => {
     trustedUser = { id: 'admin-1' };
+    userRepository.findUnique.mockResolvedValue({
+      status: AccountStatus.APPROVED,
+      systemRole: SystemRole.ADMIN,
+    });
     await request(app.getHttpServer())
       .patch('/admin/one-shots/one-shot-1/correction')
       .send(body)
@@ -324,6 +328,10 @@ describe('AppController (e2e)', () => {
 
   it('validates campaign input before reaching the domain service', async () => {
     trustedUser = { id: 'master-1' };
+    userRepository.findUnique.mockResolvedValue({
+      status: AccountStatus.APPROVED,
+      clubRoles: [{ role: ClubRole.MASTER }],
+    });
     const response = await request(app.getHttpServer())
       .post('/campaigns')
       .send({ title: 'Campanha sem sistema' })
@@ -337,6 +345,10 @@ describe('AppController (e2e)', () => {
 
   it('validates the mandatory session of a one-shot', async () => {
     trustedUser = { id: 'master-1' };
+    userRepository.findUnique.mockResolvedValue({
+      status: AccountStatus.APPROVED,
+      clubRoles: [{ role: ClubRole.MASTER }],
+    });
     const response = await request(app.getHttpServer())
       .post('/one-shots')
       .send({ gameSystemId: 'system-1', title: 'One-shot incompleto' })

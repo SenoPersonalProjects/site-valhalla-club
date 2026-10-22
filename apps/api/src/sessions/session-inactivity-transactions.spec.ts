@@ -1,3 +1,4 @@
+import { AuthorizationService } from '../authorization/authorization.service';
 import { Prisma } from '../generated/prisma/client';
 import { CampaignStatus, SessionStatus } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
@@ -15,9 +16,6 @@ const conflict = () =>
     code: 'P2034',
     clientVersion: '7.10.0',
   });
-const actors = {
-  assertCanManage: jest.fn().mockResolvedValue(undefined),
-} as unknown as TableActorsService;
 const future = new Date(Date.now() + 60 * 86_400_000);
 const past = new Date(Date.now() - 60 * 86_400_000);
 const session = {
@@ -36,13 +34,19 @@ function harness() {
     throw new Error('root state access forbidden');
   });
   const tx = {
-    campaign: {
+    user: {
       findUnique: jest
         .fn()
         .mockResolvedValue({
-          masterId: 'master-1',
-          status: CampaignStatus.ACTIVE,
+          status: 'APPROVED',
+          clubRoles: [{ role: 'MASTER' }],
         }),
+    },
+    campaign: {
+      findUnique: jest.fn().mockResolvedValue({
+        masterId: 'master-1',
+        status: CampaignStatus.ACTIVE,
+      }),
       update: outside,
     },
     session: {
@@ -58,6 +62,7 @@ function harness() {
   );
   const prisma = {
     $transaction: transaction,
+    user: { findUnique: outside },
     campaign: { findUnique: outside, update: outside },
     session: {
       findUnique: outside,
@@ -70,7 +75,11 @@ function harness() {
     tx,
     transaction,
     outside,
-    service: new SessionsService(prisma, actors, new TableRulesService(prisma)),
+    service: new SessionsService(
+      prisma,
+      new TableActorsService(prisma, new AuthorizationService(prisma)),
+      new TableRulesService(prisma),
+    ),
   };
 }
 
@@ -111,6 +120,7 @@ describe('Campaign session transaction boundaries', () => {
             ? h.tx.session.delete
             : h.tx.session.update;
       expect(write).toHaveBeenCalledTimes(1);
+      expect(h.tx.user.findUnique).toHaveBeenCalledTimes(1);
       expect(h.outside).not.toHaveBeenCalled();
       if (operation === 'create' || operation === 'update') {
         expect(write).toHaveBeenCalledWith(
@@ -119,6 +129,34 @@ describe('Campaign session transaction boundaries', () => {
           }),
         );
       }
+    },
+  );
+
+  it.each(['create', 'update', 'changeStatus', 'remove'])(
+    '%s rejects a master whose authority is lost between transaction attempts',
+    async (operation) => {
+      const h = harness();
+      h.transaction.mockImplementationOnce(async (callback) => {
+        await callback(h.tx as unknown as Prisma.TransactionClient);
+        h.tx.user.findUnique.mockResolvedValue({
+          status: 'SUSPENDED',
+          clubRoles: [{ role: 'MASTER' }],
+        });
+        throw conflict();
+      });
+      await expect(invoke(h.service, operation)).rejects.toMatchObject({
+        response: { code: 'MASTER_ACCOUNT_NOT_APPROVED' },
+      });
+      expect(h.transaction).toHaveBeenCalledTimes(2);
+      expect(h.tx.user.findUnique).toHaveBeenCalledTimes(2);
+      const write =
+        operation === 'create'
+          ? h.tx.session.create
+          : operation === 'remove'
+            ? h.tx.session.delete
+            : h.tx.session.update;
+      expect(write).toHaveBeenCalledTimes(1);
+      expect(h.outside).not.toHaveBeenCalled();
     },
   );
 
@@ -238,6 +276,14 @@ describe('PR #41 inactivity versus session writes', () => {
             inactivity = false;
           let stagedDate = snapshotDate;
           const tx = {
+            user: {
+              findUnique: jest
+                .fn()
+                .mockResolvedValue({
+                  status: 'APPROVED',
+                  clubRoles: [{ role: 'MASTER' }],
+                }),
+            },
             campaign: {
               findUnique: jest.fn(async () => {
                 campaignReads.push(snapshotStatus);
@@ -321,7 +367,11 @@ describe('PR #41 inactivity versus session writes', () => {
         error: jest.fn(),
       } as unknown as StructuredLoggerService;
       const reconciliation = new CampaignInactivityService(rules, logger);
-      const sessions = new SessionsService(prisma, actors, rules);
+      const sessions = new SessionsService(
+        prisma,
+        new TableActorsService(prisma, new AuthorizationService(prisma)),
+        rules,
+      );
       const pending = reconciliation.reconcile(now);
       if (mode === 'reconciliation-first') await pending;
       else await snapshotRead;

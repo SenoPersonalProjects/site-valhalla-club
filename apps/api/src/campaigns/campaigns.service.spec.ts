@@ -145,6 +145,7 @@ describe('CampaignsService', () => {
     expect(actorMethods.assertCanManage).toHaveBeenCalledWith(
       'master-1',
       'master-1',
+      prisma,
     );
     expect(campaignRepository.count).not.toHaveBeenCalled();
     expect(campaignRepository.update).not.toHaveBeenCalled();
@@ -223,7 +224,10 @@ describe('CampaignsService', () => {
         decision: ApprovalStatus.APPROVED,
         note,
       });
-      expect(actorMethods.assertAdministrator).toHaveBeenCalledWith('admin-1');
+      expect(actorMethods.assertAdministrator).toHaveBeenCalledWith(
+        'admin-1',
+        prisma,
+      );
       expect(result).toBe(active);
       expect(result.updatedAt).toEqual(new Date('2026-09-01T12:00:00Z'));
       expect(result.reviewedById).toBe('original-admin');

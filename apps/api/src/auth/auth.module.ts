@@ -1,3 +1,5 @@
+import { AuthorizationModule } from '../authorization/authorization.module';
+import { AuthorizationGuard } from '../authorization/authorization.guard';
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
@@ -17,6 +19,7 @@ import { PasswordService } from './password.service';
   imports: [
     PrismaModule,
     TablesModule,
+    AuthorizationModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: jwtConfiguration,
@@ -27,7 +30,9 @@ import { PasswordService } from './password.service';
     AuthService,
     PasswordService,
     AuthGuard,
+    // Register both guards together, in execution order, independent of imports.
     { provide: APP_GUARD, useExisting: AuthGuard },
+    { provide: APP_GUARD, useExisting: AuthorizationGuard },
   ],
   exports: [JwtModule],
 })
