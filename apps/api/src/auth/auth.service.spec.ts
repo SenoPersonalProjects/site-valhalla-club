@@ -2,6 +2,7 @@ import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '../generated/prisma/client';
 import { AccountStatus, SystemRole } from '../generated/prisma/enums';
+import { AuthorizationService } from '../authorization/authorization.service';
 import { TableActorsService } from '../tables/table-actors.service';
 import { AuthService, sessionUserSelect } from './auth.service';
 import { PasswordService } from './password.service';
@@ -325,7 +326,7 @@ describe('Authentication concurrency', () => {
       prisma,
       {} as PasswordService,
       {} as JwtService,
-      new TableActorsService(prisma),
+      new TableActorsService(prisma, new AuthorizationService(prisma)),
     );
     const results = await Promise.allSettled([
       service.review('target', 'reviewer-a', {

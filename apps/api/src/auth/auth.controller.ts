@@ -1,3 +1,5 @@
+import { RequireRoles } from '../authorization/require-roles.decorator';
+import { ADMINISTRATOR_REQUIREMENT } from '../authorization/authorization.policies';
 import {
   Body,
   Controller,
@@ -38,6 +40,7 @@ export class AuthController {
 }
 
 @Controller('admin/users')
+@RequireRoles(ADMINISTRATOR_REQUIREMENT)
 export class RegistrationReviewController {
   constructor(private readonly auth: AuthService) {}
   @Patch(':id/registration-review')

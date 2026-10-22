@@ -1,3 +1,8 @@
+import { RequireRoles } from '../authorization/require-roles.decorator';
+import {
+  ADMINISTRATOR_REQUIREMENT,
+  MASTER_REQUIREMENT,
+} from '../authorization/authorization.policies';
 import {
   Body,
   Controller,
@@ -24,6 +29,7 @@ export class CampaignsController {
   constructor(private readonly campaignsService: CampaignsService) {}
 
   @Post()
+  @RequireRoles(MASTER_REQUIREMENT)
   create(@CurrentUserId() userId: string, @Body() dto: CreateCampaignDto) {
     return this.campaignsService.create(userId, dto);
   }
@@ -73,6 +79,7 @@ export class CampaignsController {
 }
 
 @Controller('admin/campaigns')
+@RequireRoles(ADMINISTRATOR_REQUIREMENT)
 export class AdminCampaignsController {
   constructor(private readonly campaignsService: CampaignsService) {}
 

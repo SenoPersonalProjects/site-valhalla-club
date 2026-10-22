@@ -1,8 +1,10 @@
 # Cadastro, aprovação e autenticação
 
 Task `86e39whqc`. Implementação da API; não declara deploy ou migration aplicada.
-Não inclui administração completa de usuários, guards genéricos de roles,
+Não inclui administração completa de usuários,
 refresh token, recuperação de senha, OAuth, MFA, cookies ou frontend.
+Os guards reutilizáveis e a separação SystemRole/ClubRole estão documentados em
+[papéis e autorização](roles-authorization.md), task `86e39why4`.
 
 ## Rotas e contratos
 

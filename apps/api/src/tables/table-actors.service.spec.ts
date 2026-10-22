@@ -1,5 +1,6 @@
 import { AccountStatus, ClubRole, SystemRole } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuthorizationService } from '../authorization/authorization.service';
 import { TableActorsService } from './table-actors.service';
 import { Prisma } from '../generated/prisma/client';
 
@@ -10,7 +11,10 @@ describe('TableActorsService', () => {
     user: userRepository,
     gameSystem: gameSystemRepository,
   } as unknown as PrismaService;
-  const service = new TableActorsService(prisma);
+  const service = new TableActorsService(
+    prisma,
+    new AuthorizationService(prisma),
+  );
 
   beforeEach(() => jest.clearAllMocks());
 
@@ -23,9 +27,13 @@ describe('TableActorsService', () => {
     await expect(service.assertMaster('master-1')).resolves.toBeUndefined();
   });
 
-  it('rejects a master whose account is not approved', async () => {
+  it.each(
+    Object.values(AccountStatus).filter(
+      (status) => status !== AccountStatus.APPROVED,
+    ),
+  )('rejects a master whose account status is %s', async (status) => {
     userRepository.findUnique.mockResolvedValue({
-      status: AccountStatus.PENDING,
+      status,
       clubRoles: [{ id: 'role-1', role: ClubRole.MASTER }],
     });
 
@@ -59,12 +67,10 @@ describe('TableActorsService', () => {
   });
 
   it('checks administrative authority with the supplied transaction only', async () => {
-    const findUnique = jest
-      .fn()
-      .mockResolvedValue({
-        status: AccountStatus.APPROVED,
-        systemRole: SystemRole.ADMIN,
-      });
+    const findUnique = jest.fn().mockResolvedValue({
+      status: AccountStatus.APPROVED,
+      systemRole: SystemRole.ADMIN,
+    });
     const transaction = {
       user: { findUnique },
     } as unknown as Prisma.TransactionClient;

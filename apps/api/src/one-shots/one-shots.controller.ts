@@ -1,3 +1,8 @@
+import { RequireRoles } from '../authorization/require-roles.decorator';
+import {
+  ADMINISTRATOR_REQUIREMENT,
+  MASTER_REQUIREMENT,
+} from '../authorization/authorization.policies';
 import {
   Body,
   Controller,
@@ -25,6 +30,7 @@ export class OneShotsController {
   constructor(private readonly oneShotsService: OneShotsService) {}
 
   @Post()
+  @RequireRoles(MASTER_REQUIREMENT)
   create(@CurrentUserId() userId: string, @Body() dto: CreateOneShotDto) {
     return this.oneShotsService.create(userId, dto);
   }
@@ -74,6 +80,7 @@ export class OneShotsController {
 }
 
 @Controller('admin/one-shots')
+@RequireRoles(ADMINISTRATOR_REQUIREMENT)
 export class AdminOneShotsController {
   constructor(private readonly oneShotsService: OneShotsService) {}
 

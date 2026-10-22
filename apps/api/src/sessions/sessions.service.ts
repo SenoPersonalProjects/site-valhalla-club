@@ -61,7 +61,11 @@ export class SessionsService {
         throw notFound('CAMPAIGN_NOT_FOUND', 'Campanha não encontrada');
       }
 
-      await this.actors.assertCanManage(campaign.masterId, actorId);
+      await this.actors.assertCanManage(
+        campaign.masterId,
+        actorId,
+        transaction,
+      );
 
       if (campaign.status === CampaignStatus.ARCHIVED) {
         throw conflict(
@@ -112,7 +116,11 @@ export class SessionsService {
   async update(id: string, actorId: string, dto: UpdateSessionDto) {
     return this.rules.serializable(async (transaction) => {
       const session = await this.getByIdOrThrow(id, transaction);
-      await this.actors.assertCanManage(this.ownerId(session), actorId);
+      await this.actors.assertCanManage(
+        this.ownerId(session),
+        actorId,
+        transaction,
+      );
       this.assertCampaignSession(session);
 
       if (session.status !== SessionStatus.SCHEDULED) {
@@ -147,7 +155,11 @@ export class SessionsService {
   async changeStatus(id: string, actorId: string, dto: ChangeSessionStatusDto) {
     return this.rules.serializable(async (transaction) => {
       const session = await this.getByIdOrThrow(id, transaction);
-      await this.actors.assertCanManage(this.ownerId(session), actorId);
+      await this.actors.assertCanManage(
+        this.ownerId(session),
+        actorId,
+        transaction,
+      );
       this.assertCampaignSession(session);
 
       if (session.status !== SessionStatus.SCHEDULED) {
@@ -203,7 +215,11 @@ export class SessionsService {
   async remove(id: string, actorId: string): Promise<void> {
     return this.rules.serializable(async (transaction) => {
       const session = await this.getByIdOrThrow(id, transaction);
-      await this.actors.assertCanManage(this.ownerId(session), actorId);
+      await this.actors.assertCanManage(
+        this.ownerId(session),
+        actorId,
+        transaction,
+      );
 
       if (session.oneShotId) {
         throw conflict(

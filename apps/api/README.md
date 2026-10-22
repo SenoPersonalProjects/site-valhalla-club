@@ -17,8 +17,12 @@ As rotas públicas continuam acessíveis. A landing do MVP não depende desta AP
 
 O [contrato de autenticação](../../docs/api/auth.md) detalha cadastro PENDING,
 aprovação/rejeição por ADMIN/DEV, hash bcrypt, projeções e códigos de erro.
-Administração completa de usuários e guards genéricos de roles não fazem parte
-desta entrega. O cadastro não concede papéis de clube automaticamente.
+A [camada de autorização](../../docs/api/roles-authorization.md) centraliza os
+requisitos de SystemRole e ClubRole, com guard global após a autenticação e
+verificação no banco também pelos serviços, incluindo TransactionClient.
+ClubRole.ADMIN não concede administração técnica; somente contas APPROVED
+exercem roles. Administração completa de usuários permanece fora do escopo.
+O cadastro não concede papéis de clube automaticamente.
 
 Consulte a [documentação de campanhas, sessões e one-shots](../../docs/api/tables-domain.md).
 

@@ -8,15 +8,11 @@ import {
 import { CampaignsService } from '../campaigns/campaigns.service';
 import { OneShotsService } from '../one-shots/one-shots.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuthorizationService } from '../authorization/authorization.service';
 import { TableActorsService } from './table-actors.service';
 import { TableRulesService } from './table-rules.service';
 
 describe('Operational state transaction boundaries', () => {
-  const actors = {
-    assertCanManage: jest.fn().mockResolvedValue(undefined),
-    assertAdministrator: jest.fn().mockResolvedValue(undefined),
-    assertActiveGameSystem: jest.fn().mockResolvedValue(undefined),
-  } as unknown as TableActorsService;
   const campaign = {
     id: 'campaign-1',
     masterId: 'master-1',
@@ -39,12 +35,20 @@ describe('Operational state transaction boundaries', () => {
   };
   function harness() {
     const tx = {
+      user: {
+        findUnique: jest.fn().mockResolvedValue({
+          status: 'APPROVED',
+          systemRole: 'ADMIN',
+          clubRoles: [{ role: 'MASTER' }],
+        }),
+      },
       campaign: {
         findUnique: jest.fn().mockResolvedValue(campaign),
         update: jest.fn(),
         delete: jest.fn(),
       },
       oneShot: {
+        create: jest.fn(),
         findUnique: jest.fn().mockResolvedValue(oneShot),
         update: jest.fn(),
         delete: jest.fn(),
@@ -70,21 +74,59 @@ describe('Operational state transaction boundaries', () => {
       oneShot: { findUnique: rootRead, update: rootWrite, delete: rootWrite },
       session: { update: rootWrite, delete: rootWrite },
       gameSystem: { findUnique: rootRead },
-      user: {
-        findUnique: jest
-          .fn()
-          .mockResolvedValue({ status: 'APPROVED', systemRole: 'ADMIN' }),
-      },
+      user: { findUnique: rootRead },
     } as unknown as PrismaService;
     const rules = new TableRulesService(prisma);
-    return { tx, rootRead, rootWrite, transaction, prisma, rules };
+    return {
+      tx,
+      rootRead,
+      rootWrite,
+      transaction,
+      prisma,
+      rules,
+      actors: new TableActorsService(prisma, new AuthorizationService(prisma)),
+    };
   }
+
+  it('rechecks MASTER inside each OneShot creation attempt, including after P2034', async () => {
+    const h = harness();
+    h.transaction.mockImplementationOnce(async (callback) => {
+      await callback(h.tx as unknown as Prisma.TransactionClient);
+      h.tx.user.findUnique.mockResolvedValue({
+        status: 'APPROVED',
+        systemRole: 'ADMIN',
+        clubRoles: [],
+      });
+      throw new Prisma.PrismaClientKnownRequestError('conflict', {
+        code: 'P2034',
+        clientVersion: '7.10.0',
+      });
+    });
+    const service = new OneShotsService(h.prisma, h.actors, h.rules);
+    await expect(
+      service.create('master-1', {
+        gameSystemId: 'system-1',
+        title: 'One-shot',
+        session: {
+          scheduledAt: new Date(Date.now() + 86_400_000).toISOString(),
+        },
+      }),
+    ).rejects.toMatchObject({ response: { code: 'MASTER_ROLE_REQUIRED' } });
+    expect(h.transaction).toHaveBeenCalledTimes(2);
+    expect(h.tx.user.findUnique).toHaveBeenCalledTimes(2);
+    expect(h.tx.oneShot.create).toHaveBeenCalledTimes(1);
+    expect(h.tx.gameSystem.findUnique).toHaveBeenCalledWith({
+      where: { id: 'system-1' },
+      select: { active: true },
+    });
+    expect(h.rootRead).not.toHaveBeenCalled();
+  });
 
   it.each(['update', 'remove', 'publish', 'changeStatus', 'review'] as const)(
     'reads and validates one-shot state inside the writing transaction for %s',
     async (operation) => {
       const h = harness();
-      const service = new OneShotsService(h.prisma, actors, h.rules);
+      const service = new OneShotsService(h.prisma, h.actors, h.rules);
       if (operation === 'remove')
         h.tx.oneShot.findUnique.mockResolvedValue({
           ...oneShot,
@@ -119,6 +161,7 @@ describe('Operational state transaction boundaries', () => {
       expect(
         operation === 'remove' ? h.tx.oneShot.delete : h.tx.oneShot.update,
       ).toHaveBeenCalledTimes(1);
+      expect(h.tx.user.findUnique).toHaveBeenCalledTimes(1);
       expect(h.rootRead).not.toHaveBeenCalled();
       expect(h.rootWrite).not.toHaveBeenCalled();
       expect(h.transaction).toHaveBeenCalledWith(expect.any(Function), {
@@ -131,7 +174,7 @@ describe('Operational state transaction boundaries', () => {
     'reads campaign state inside the writing transaction for %s',
     async (operation) => {
       const h = harness();
-      const service = new CampaignsService(h.prisma, actors, h.rules);
+      const service = new CampaignsService(h.prisma, h.actors, h.rules);
       if (operation === 'remove')
         h.tx.campaign.findUnique.mockResolvedValue({
           ...campaign,
@@ -153,8 +196,57 @@ describe('Operational state transaction boundaries', () => {
           note: 'Revisão',
         });
       expect(h.tx.campaign.findUnique).toHaveBeenCalledTimes(1);
+      expect(h.tx.user.findUnique).toHaveBeenCalledTimes(1);
       expect(h.rootRead).not.toHaveBeenCalled();
       expect(h.rootWrite).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['campaign-review', 'one-shot-review', 'one-shot-correction'])(
+    '%s rechecks administrative authority after a transaction conflict',
+    async (operation) => {
+      const h = harness();
+      h.transaction.mockImplementationOnce(async (callback) => {
+        await callback(h.tx as unknown as Prisma.TransactionClient);
+        h.tx.user.findUnique.mockResolvedValue({
+          status: 'APPROVED',
+          systemRole: 'USER',
+          clubRoles: [{ role: 'MASTER' }],
+        });
+        throw new Prisma.PrismaClientKnownRequestError('conflict', {
+          code: 'P2034',
+          clientVersion: '7.10.0',
+        });
+      });
+      const campaigns = new CampaignsService(h.prisma, h.actors, h.rules);
+      const oneShots = new OneShotsService(h.prisma, h.actors, h.rules);
+      const result =
+        operation === 'campaign-review'
+          ? campaigns.review('campaign-1', 'admin-1', {
+              decision: ApprovalStatus.REJECTED,
+              note: 'Review',
+            })
+          : operation === 'one-shot-review'
+            ? oneShots.review('one-shot-1', 'admin-1', {
+                decision: ApprovalStatus.REJECTED,
+                note: 'Review',
+              })
+            : oneShots.correct('one-shot-1', 'admin-1', {
+                gameSystemId: 'system-2',
+                scheduledAt: new Date(Date.now() + 86_400_000).toISOString(),
+              });
+      await expect(result).rejects.toMatchObject({
+        response: { code: 'ADMIN_ROLE_REQUIRED' },
+      });
+      expect(h.transaction).toHaveBeenCalledTimes(2);
+      expect(h.tx.user.findUnique).toHaveBeenCalledTimes(2);
+      // The first write is rolled back; the new attempt cannot reuse its authority.
+      expect(
+        operation === 'campaign-review'
+          ? h.tx.campaign.update
+          : h.tx.oneShot.update,
+      ).toHaveBeenCalledTimes(1);
+      expect(h.rootRead).not.toHaveBeenCalled();
     },
   );
 
@@ -162,7 +254,7 @@ describe('Operational state transaction boundaries', () => {
     const h = harness();
     const service = new OneShotsService(
       h.prisma,
-      new TableActorsService(h.prisma),
+      new TableActorsService(h.prisma, new AuthorizationService(h.prisma)),
       h.rules,
     );
     await service.correct('one-shot-1', 'admin-1', {
@@ -182,7 +274,7 @@ describe('Operational state transaction boundaries', () => {
 
   it('re-reads a concurrent approval/publication and does not refresh ACTIVE on retry', async () => {
     const h = harness();
-    const service = new CampaignsService(h.prisma, actors, h.rules);
+    const service = new CampaignsService(h.prisma, h.actors, h.rules);
     h.tx.campaign.findUnique.mockResolvedValueOnce({
       ...campaign,
       status: CampaignStatus.INACTIVE,
@@ -207,7 +299,7 @@ describe('Operational state transaction boundaries', () => {
 
   it('does not complete a session using a date read before concurrent correction', async () => {
     const h = harness();
-    const service = new OneShotsService(h.prisma, actors, h.rules);
+    const service = new OneShotsService(h.prisma, h.actors, h.rules);
     h.transaction.mockImplementationOnce(async (operation) => {
       await operation(h.tx as unknown as Prisma.TransactionClient);
       h.tx.oneShot.findUnique.mockResolvedValue({

@@ -6,6 +6,8 @@ import { ModulesContainer, Reflector } from '@nestjs/core';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { RequestMethod } from '@nestjs/common';
 import { PUBLIC_ROUTE } from '../src/auth/public.decorator';
+import { AuthGuard } from '../src/auth/auth.guard';
+import { AuthorizationGuard } from '../src/authorization/authorization.guard';
 import request from 'supertest';
 import * as bcrypt from 'bcryptjs';
 import { AppModule } from '../src/app.module';
@@ -119,6 +121,11 @@ describe('Authentication with real Bearer JWT (e2e)', () => {
         }),
       },
       campaign: {
+        create: jest.fn(async ({ data }) => ({
+          id: 'created-campaign',
+          ...data,
+        })),
+        update: jest.fn(async ({ where, data }) => ({ id: where.id, ...data })),
         findMany: jest.fn().mockResolvedValue([]),
         count: jest.fn().mockResolvedValue(0),
         updateMany: jest.fn().mockResolvedValue({ count: 0 }),
@@ -129,13 +136,28 @@ describe('Authentication with real Bearer JWT (e2e)', () => {
         }),
       },
       oneShot: {
+        create: jest.fn(async ({ data }) => ({
+          id: 'created-one-shot',
+          ...data,
+        })),
+        update: jest.fn(async ({ where, data }) => ({ id: where.id, ...data })),
         findMany: jest.fn().mockResolvedValue([]),
         count: jest.fn().mockResolvedValue(0),
-        findUnique: jest
-          .fn()
-          .mockResolvedValue({ id: 'one-shot', masterId: 'master' }),
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'one-shot',
+          masterId: 'master',
+          gameSystemId: 'system',
+          status: 'DRAFT',
+          approvalStatus: 'PENDING',
+          session: {
+            id: 'one-shot-session',
+            scheduledAt: new Date(Date.now() + 86_400_000),
+          },
+        }),
       },
+      gameSystem: { findUnique: jest.fn().mockResolvedValue({ active: true }) },
       session: {
+        update: jest.fn(async ({ where, data }) => ({ id: where.id, ...data })),
         findUnique: jest.fn().mockResolvedValue({
           id: 'session',
           campaignId: 'campaign',
@@ -463,6 +485,245 @@ describe('Authentication with real Bearer JWT (e2e)', () => {
       .expect(403);
     expect(response.body.code).toBe('ADMIN_ROLE_REQUIRED');
     expect(users.get('pending').status).toBe('PENDING');
+  });
+
+  const adminOperations = [
+    {
+      path: '/admin/users/pending/registration-review',
+      body: { decision: 'APPROVED' },
+    },
+    {
+      path: '/admin/campaigns/campaign/approval',
+      body: { decision: 'APPROVED' },
+    },
+    {
+      path: '/admin/one-shots/one-shot/approval',
+      body: { decision: 'APPROVED' },
+    },
+    {
+      path: '/admin/one-shots/one-shot/correction',
+      body: { gameSystemId: 'system-2' },
+    },
+  ];
+  it.each([
+    { scenario: 'missing', code: 'AUTH_TOKEN_REQUIRED' },
+    { scenario: 'invalid', code: 'AUTH_TOKEN_INVALID' },
+    { scenario: 'expired', code: 'AUTH_TOKEN_INVALID' },
+    { scenario: 'revoked', code: 'AUTH_TOKEN_REVOKED' },
+  ])(
+    'AuthGuard stops a $scenario Bearer before AuthorizationGuard on a role-protected route',
+    async ({ scenario, code }) => {
+      const authentication = jest.spyOn(app.get(AuthGuard), 'canActivate');
+      const authorization = jest.spyOn(
+        app.get(AuthorizationGuard),
+        'canActivate',
+      );
+      try {
+        const bearer =
+          scenario === 'invalid'
+            ? 'invalid-token'
+            : scenario === 'expired'
+              ? jwt.sign(
+                  { sub: 'master', ver: 0, type: 'access' },
+                  { expiresIn: -1 },
+                )
+              : token('master');
+        if (scenario === 'revoked') users.get('master').authVersion++;
+        const operation = request(app.getHttpServer())
+          .patch('/admin/campaigns/campaign/approval')
+          .set('x-user-id', 'admin');
+        if (scenario !== 'missing')
+          operation.set('Authorization', `Bearer ${bearer}`);
+        const response = await operation
+          .send({ decision: 'APPROVED' })
+          .expect(401);
+        expect(response.body.code).toBe(code);
+        expect(authentication).toHaveBeenCalledTimes(1);
+        expect(authorization).not.toHaveBeenCalled();
+        expect(prisma.campaign.findUnique).not.toHaveBeenCalled();
+        expect(prisma.campaign.update).not.toHaveBeenCalled();
+      } finally {
+        authentication.mockRestore();
+        authorization.mockRestore();
+      }
+    },
+  );
+  it('runs AuthorizationGuard only after AuthGuard creates the trusted identity', async () => {
+    const authentication = jest.spyOn(app.get(AuthGuard), 'canActivate');
+    const authorization = jest.spyOn(
+      app.get(AuthorizationGuard),
+      'canActivate',
+    );
+    try {
+      const response = await request(app.getHttpServer())
+        .patch('/admin/campaigns/campaign/approval')
+        .set('Authorization', `Bearer ${token('master')}`)
+        .send({ decision: 'APPROVED' })
+        .expect(403);
+      expect(response.body.code).toBe('ADMIN_ROLE_REQUIRED');
+      expect(authentication).toHaveBeenCalledTimes(1);
+      expect(authorization).toHaveBeenCalledTimes(1);
+      expect(authentication.mock.invocationCallOrder[0]).toBeLessThan(
+        authorization.mock.invocationCallOrder[0],
+      );
+      expect(
+        authorization.mock.calls[0][0].switchToHttp().getRequest().user,
+      ).toEqual({ id: 'master' });
+    } finally {
+      authentication.mockRestore();
+      authorization.mockRestore();
+    }
+  });
+  it.each(adminOperations)(
+    'rejects club ADMIN at $path before accessing domain data',
+    async ({ path, body }) => {
+      users.get('admin').systemRole = 'USER';
+      users.get('admin').clubRoles = [{ role: 'ADMIN' }];
+      seed('pending', { status: 'PENDING' });
+      const bearer = (await login('admin').expect(200)).body.accessToken;
+      const response = await request(app.getHttpServer())
+        .patch(path)
+        .set('Authorization', `Bearer ${bearer}`)
+        .send(body)
+        .expect(403);
+      expect(response.body.code).toBe('ADMIN_ROLE_REQUIRED');
+      expect(prisma.campaign.findUnique).not.toHaveBeenCalled();
+      expect(prisma.oneShot.findUnique).not.toHaveBeenCalled();
+      expect(prisma.user.updateMany).not.toHaveBeenCalled();
+      expect(prisma.campaign.update).not.toHaveBeenCalled();
+      expect(prisma.oneShot.update).not.toHaveBeenCalled();
+      expect(prisma.session.update).not.toHaveBeenCalled();
+    },
+  );
+  it.each(
+    adminOperations.flatMap((operation) =>
+      ['ADMIN', 'DEV'].map((systemRole) => ({ ...operation, systemRole })),
+    ),
+  )(
+    'allows approved system $systemRole at $path with a real login JWT',
+    async ({ path, body, systemRole }) => {
+      users.get('admin').systemRole = systemRole;
+      seed('pending', { status: 'PENDING' });
+      const bearer = (await login('admin').expect(200)).body.accessToken;
+      await request(app.getHttpServer())
+        .patch(path)
+        .set('Authorization', `Bearer ${bearer}`)
+        .send(body)
+        .expect(200);
+      // No club MASTER/ADMIN is needed for explicit administrative operations.
+      expect(users.get('admin').clubRoles).toEqual([]);
+    },
+  );
+  it('rechecks system role in the database with the same JWT after demotion', async () => {
+    const bearer = (await login('admin').expect(200)).body.accessToken;
+    users.get('admin').systemRole = 'USER';
+    users.get('admin').clubRoles = [{ role: 'ADMIN' }];
+    const response = await request(app.getHttpServer())
+      .patch('/admin/campaigns/campaign/approval')
+      .set('Authorization', `Bearer ${bearer}`)
+      .send({ decision: 'APPROVED' })
+      .expect(403);
+    expect(response.body.code).toBe('ADMIN_ROLE_REQUIRED');
+    expect(prisma.campaign.update).not.toHaveBeenCalled();
+  });
+
+  const masterOperations = [
+    { path: '/campaigns', body: { gameSystemId: 'system', title: 'Campaign' } },
+    {
+      path: '/one-shots',
+      body: {
+        gameSystemId: 'system',
+        title: 'One-shot',
+        session: {
+          title: 'Session',
+          scheduledAt: new Date(Date.now() + 86_400_000).toISOString(),
+        },
+      },
+    },
+  ];
+  it.each(masterOperations)(
+    'permits cumulative MASTER creation at $path',
+    async ({ path, body }) => {
+      users.get('master').clubRoles = [
+        { role: 'PLAYER' },
+        { role: 'MASTER' },
+        { role: 'ADMIN' },
+      ];
+      const bearer = (await login().expect(200)).body.accessToken;
+      const response = await request(app.getHttpServer())
+        .post(path)
+        .set('Authorization', `Bearer ${bearer}`)
+        .send(body)
+        .expect(201);
+      expect(response.body.masterId).toBe('master');
+    },
+  );
+  it.each(
+    masterOperations.flatMap((operation) =>
+      [
+        { systemRole: 'USER', clubRoles: [{ role: 'PLAYER' }] },
+        { systemRole: 'USER', clubRoles: [{ role: 'ADMIN' }] },
+        { systemRole: 'ADMIN', clubRoles: [] },
+        { systemRole: 'DEV', clubRoles: [] },
+      ].map((roles) => ({ ...operation, ...roles })),
+    ),
+  )(
+    'does not infer MASTER from $systemRole / $clubRoles at $path',
+    async ({ path, body, systemRole, clubRoles }) => {
+      Object.assign(users.get('master'), { systemRole, clubRoles });
+      const bearer = (await login().expect(200)).body.accessToken;
+      const response = await request(app.getHttpServer())
+        .post(path)
+        .set('Authorization', `Bearer ${bearer}`)
+        .send(body)
+        .expect(403);
+      expect(response.body.code).toBe('MASTER_ROLE_REQUIRED');
+      expect(prisma.campaign.create).not.toHaveBeenCalled();
+      expect(prisma.oneShot.create).not.toHaveBeenCalled();
+    },
+  );
+  it.each(['headers', 'query', 'body'])(
+    'ignores client roles supplied in %s',
+    async (source) => {
+      users.get('master').clubRoles = [{ role: 'PLAYER' }];
+      const bearer = (await login().expect(200)).body.accessToken;
+      const operation = request(app.getHttpServer())
+        .post('/campaigns')
+        .set('Authorization', `Bearer ${bearer}`);
+      const injection = {
+        systemRole: 'DEV',
+        clubRoles: ['MASTER', 'ADMIN'],
+        status: 'APPROVED',
+      };
+      if (source === 'headers')
+        operation.set({
+          'x-system-role': 'DEV',
+          'x-club-roles': 'MASTER,ADMIN',
+          'x-user-id': 'admin',
+        });
+      if (source === 'query') operation.query(injection);
+      const response = await operation
+        .send({
+          ...masterOperations[0].body,
+          ...(source === 'body' ? injection : {}),
+        })
+        .expect(403);
+      expect(response.body.code).toBe('MASTER_ROLE_REQUIRED');
+      expect(prisma.campaign.create).not.toHaveBeenCalled();
+    },
+  );
+  it('keeps explicit administrative management of other masters resources', async () => {
+    const bearer = (await login('admin').expect(200)).body.accessToken;
+    for (const path of [
+      '/campaigns/campaign',
+      '/one-shots/one-shot',
+      '/sessions/session',
+    ]) {
+      await request(app.getHttpServer())
+        .get(path)
+        .set('Authorization', `Bearer ${bearer}`)
+        .expect(200);
+    }
   });
   it.each([
     '/tables/me',

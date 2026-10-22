@@ -106,7 +106,11 @@ export class CampaignsService {
   async update(id: string, actorId: string, dto: UpdateCampaignDto) {
     return this.rules.serializable(async (transaction) => {
       const campaign = await this.getByIdOrThrow(id, transaction);
-      await this.actors.assertCanManage(campaign.masterId, actorId);
+      await this.actors.assertCanManage(
+        campaign.masterId,
+        actorId,
+        transaction,
+      );
 
       if (campaign.status === CampaignStatus.ARCHIVED) {
         throw conflict(
@@ -171,7 +175,11 @@ export class CampaignsService {
         throw notFound('CAMPAIGN_NOT_FOUND', 'Campanha não encontrada');
       }
 
-      await this.actors.assertCanManage(campaign.masterId, actorId);
+      await this.actors.assertCanManage(
+        campaign.masterId,
+        actorId,
+        transaction,
+      );
 
       if (
         campaign.status !== CampaignStatus.DRAFT ||
@@ -191,7 +199,11 @@ export class CampaignsService {
   async publish(id: string, actorId: string) {
     return this.rules.serializable(async (transaction) => {
       const campaign = await this.getByIdOrThrow(id, transaction);
-      await this.actors.assertCanManage(campaign.masterId, actorId);
+      await this.actors.assertCanManage(
+        campaign.masterId,
+        actorId,
+        transaction,
+      );
 
       if (campaign.approvalStatus !== ApprovalStatus.APPROVED) {
         throw conflict(
@@ -231,7 +243,11 @@ export class CampaignsService {
   ) {
     return this.rules.serializable(async (transaction) => {
       const campaign = await this.getByIdOrThrow(id, transaction);
-      await this.actors.assertCanManage(campaign.masterId, actorId);
+      await this.actors.assertCanManage(
+        campaign.masterId,
+        actorId,
+        transaction,
+      );
 
       if (dto.status === CampaignStatus.ACTIVE) {
         throw badRequest(
@@ -257,8 +273,8 @@ export class CampaignsService {
   }
 
   async review(id: string, reviewerId: string, dto: ReviewCampaignDto) {
-    await this.actors.assertAdministrator(reviewerId);
     return this.rules.serializable(async (transaction) => {
+      await this.actors.assertAdministrator(reviewerId, transaction);
       const campaign = await this.getByIdOrThrow(id, transaction);
       const note = this.normalizeOptionalText(dto.note);
 
