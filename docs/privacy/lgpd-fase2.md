@@ -12,8 +12,10 @@ legal específico.
 
 Prisma, schema/migration inicial e domínio base de mesas existem. Cadastro,
 revisão inicial e JWT estão implementados no [contrato de auth](../api/auth.md).
-Gestão completa de conta/perfil, exclusão, feedback, disciplina e audit log não
-devem ser considerados implementados apenas porque seus modelos existem.
+Edição do próprio nome/WhatsApp e solicitação DELETION_PENDING estão implementadas
+no [contrato de conta](../api/account-lifecycle.md). Recuperação segura,
+anonimização definitiva, feedback, disciplina e audit log não devem ser
+considerados implementados apenas porque seus modelos existem.
 As regras abaixo orientam a implementação e seus testes futuros; esta tarefa
 não cria endpoints nem jobs de retenção.
 
@@ -86,10 +88,11 @@ com finalidade e minimização; isso não autoriza publicar dados pessoais.
 
 A janela de recuperação de **90 dias é regra de produto**, refletida nos campos
 do schema; não é obrigação universal da LGPD. Ao solicitar exclusão, o fluxo
-futuro marca `DELETION_PENDING`, registra solicitação e vencimento, deixa a conta
+implementado marca `DELETION_PENDING`, registra solicitação e vencimento, deixa a conta
 indisponível para uso normal e invalida acessos normais. Recuperação exige
 verificação de titularidade por fluxo controlado dentro da janela, sem reativação
-por header ou contato não verificado. Esse fluxo ainda precisa ser implementado.
+por header ou contato não verificado. A recuperação ainda precisa ser implementada;
+não há endpoint de recuperação nem anonimização automática na entrega atual.
 
 Depois da janela, dados sem necessidade de conservação devem ser removidos ou
 anonimizados conforme sua natureza e necessidade histórica. Remover email,

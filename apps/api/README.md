@@ -27,6 +27,11 @@ ClubRole.ADMIN não concede administração técnica; somente contas APPROVED
 exercem roles. Administração completa de usuários permanece fora do escopo.
 O cadastro não concede papéis de clube automaticamente.
 
+O [perfil e ciclo de vida da própria conta](../../docs/api/account-lifecycle.md)
+reutiliza `/auth/me`, permite editar nome/WhatsApp e solicitar exclusão com
+janela de 90 dias e revogação de tokens. Recuperação segura e anonimização
+definitiva ainda estão pendentes; não há administração de terceiros nessas rotas.
+
 Consulte a [documentação de campanhas, sessões e one-shots](../../docs/api/tables-domain.md).
 
 ## Regras operacionais de mesas

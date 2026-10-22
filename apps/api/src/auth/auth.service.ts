@@ -15,6 +15,7 @@ import {
   adultBirthDate,
   invalidRegistration,
   normalizeWhatsapp,
+  normalizeDisplayName,
 } from './auth.validation';
 import { PasswordService } from './password.service';
 
@@ -41,9 +42,7 @@ export class AuthService {
   async register(dto: RegisterDto) {
     const birthDate = adultBirthDate(dto.birthDate);
     const whatsappNumber = normalizeWhatsapp(dto.whatsappNumber);
-    const displayName = dto.displayName.trim();
-    if (!displayName)
-      invalidRegistration('INVALID_DISPLAY_NAME', 'Informe o nome de exibição');
+    const displayName = normalizeDisplayName(dto.displayName);
     const passwordHash = await this.passwords.hash(dto.password);
     try {
       return await this.prisma.user.create({
