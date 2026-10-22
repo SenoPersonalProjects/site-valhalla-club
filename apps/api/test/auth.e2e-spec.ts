@@ -8,6 +8,8 @@ import { RequestMethod } from '@nestjs/common';
 import { PUBLIC_ROUTE } from '../src/auth/public.decorator';
 import { AuthGuard } from '../src/auth/auth.guard';
 import { AuthorizationGuard } from '../src/authorization/authorization.guard';
+import { ThrottlerStorage, ThrottlerStorageService } from '@nestjs/throttler';
+import { PasswordService } from '../src/auth/password.service';
 import request from 'supertest';
 import * as bcrypt from 'bcryptjs';
 import { AppModule } from '../src/app.module';
@@ -157,6 +159,10 @@ describe('Authentication with real Bearer JWT (e2e)', () => {
       },
       gameSystem: { findUnique: jest.fn().mockResolvedValue({ active: true }) },
       session: {
+        create: jest.fn(async ({ data }) => ({
+          id: 'created-session',
+          ...data,
+        })),
         update: jest.fn(async ({ where, data }) => ({ id: where.id, ...data })),
         findUnique: jest.fn().mockResolvedValue({
           id: 'session',
@@ -180,7 +186,7 @@ describe('Authentication with real Bearer JWT (e2e)', () => {
       .overrideProvider(ConfigService)
       .useValue({
         get: (key: string) =>
-          ({ JWT_SECRET: secret, JWT_EXPIRES_IN: '15m' })[key],
+          ({ JWT_SECRET: secret, JWT_EXPIRES_IN: '15m', RENDER: 'true' })[key],
       })
       .overrideProvider(StructuredLoggerService)
       .useValue(logs)
@@ -190,6 +196,7 @@ describe('Authentication with real Bearer JWT (e2e)', () => {
     jwt = app.get(JwtService);
   });
   beforeEach(() => {
+    app.get<ThrottlerStorageService>(ThrottlerStorage).onApplicationShutdown();
     users = new Map();
     seed('admin', { systemRole: 'ADMIN' });
     seed('master', { clubRoles: [{ id: 'role', role: 'MASTER' }] });
@@ -343,21 +350,22 @@ describe('Authentication with real Bearer JWT (e2e)', () => {
       responses.find((response) => response.status === 409)!.body.code,
     ).toBe('REGISTRATION_CONFLICT');
   });
-  it('rejects minors, malformed date, missing mandatory profile and injected roles', async () => {
-    for (const dto of [
-      { ...registration(), birthDate: '2020-01-01' },
-      { ...registration(), birthDate: '2000-02-30' },
-      { ...registration(), whatsappNumber: undefined },
-      { ...registration(), systemRole: 'ADMIN' },
-      { ...registration(), displayName: '   ' },
-    ]) {
+  it.each(['minor', 'date', 'phone', 'role', 'name'])(
+    'rejects invalid registration: %s',
+    async (scenario) => {
+      const dto: Record<string, unknown> = registration();
+      if (scenario === 'minor') dto.birthDate = '2020-01-01';
+      if (scenario === 'date') dto.birthDate = '2000-02-30';
+      if (scenario === 'phone') delete dto.whatsappNumber;
+      if (scenario === 'role') dto.systemRole = 'ADMIN';
+      if (scenario === 'name') dto.displayName = '   ';
       await request(app.getHttpServer())
         .post('/auth/register')
         .send(dto)
         .expect(400);
-    }
-    expect(prisma.user.create).not.toHaveBeenCalled();
-  });
+      expect(prisma.user.create).not.toHaveBeenCalled();
+    },
+  );
   it('accepts someone exactly 18 on the club civil date', async () => {
     const parts = new Intl.DateTimeFormat('en-CA', {
       timeZone: 'America/Maceio',
@@ -388,6 +396,207 @@ describe('Authentication with real Bearer JWT (e2e)', () => {
       .get('/__test/jwt-context')
       .set('Authorization', `Bearer ${response.body.accessToken}`)
       .expect(200, { userId: 'master' });
+  });
+
+  const limitedResponse = (response: request.Response) => {
+    expect(response.status).toBe(429);
+    expect(response.body).toMatchObject({
+      code: 'RATE_LIMIT_EXCEEDED',
+      message: 'Muitas solicitações. Tente novamente mais tarde.',
+    });
+    expect(JSON.stringify(response.body)).not.toMatch(
+      /example\.com|203\.0\.113|remaining|limit:|passwordHash/,
+    );
+    expect(
+      Object.keys(response.headers).some((key) =>
+        key.startsWith('x-ratelimit'),
+      ),
+    ).toBe(false);
+  };
+
+  it('limits login by normalized identity and trusted CF IP, ignoring changing XFF, then expires the window', async () => {
+    const verify = jest
+      .spyOn(app.get(PasswordService), 'verify')
+      .mockResolvedValue(false);
+    const start = Date.now();
+    const now = jest.spyOn(Date, 'now').mockReturnValue(start);
+    const attempt = (index: number) =>
+      request(app.getHttpServer())
+        .post('/auth/login')
+        .set('CF-Connecting-IP', '203.0.113.21')
+        .set('X-Forwarded-For', `1.2.3.${index}`)
+        .send({
+          email: index % 2 ? ' MASTER@Example.COM ' : 'master@example.com',
+          password: 'wrong-password',
+        });
+    try {
+      for (let i = 0; i < 5; i++)
+        expect((await attempt(i).expect(401)).body.code).toBe(
+          'INVALID_CREDENTIALS',
+        );
+      limitedResponse(await attempt(5));
+      expect(verify).toHaveBeenCalledTimes(5);
+      now.mockReturnValue(start + 15 * 60_000);
+      expect((await attempt(6).expect(401)).body.code).toBe(
+        'INVALID_CREDENTIALS',
+      );
+    } finally {
+      verify.mockRestore();
+      now.mockRestore();
+    }
+  });
+
+  it('gives nonexistent accounts and wrong passwords the same contract before and after the login limit', async () => {
+    const verify = jest
+      .spyOn(app.get(PasswordService), 'verify')
+      .mockResolvedValue(false);
+    try {
+      for (const email of ['master@example.com', 'absent@example.com']) {
+        for (let i = 0; i < 5; i++) {
+          const response = await request(app.getHttpServer())
+            .post('/auth/login')
+            .send({ email, password: 'wrong' })
+            .expect(401);
+          expect(response.body).toMatchObject({
+            code: 'INVALID_CREDENTIALS',
+            message: 'Autenticação necessária ou sessão inválida',
+          });
+        }
+        limitedResponse(
+          await request(app.getHttpServer())
+            .post('/auth/login')
+            .send({ email, password: 'wrong' }),
+        );
+      }
+    } finally {
+      verify.mockRestore();
+    }
+  });
+
+  it('limits register to three identity attempts including conflicts, then expires after one hour', async () => {
+    const hashPassword = jest
+      .spyOn(app.get(PasswordService), 'hash')
+      .mockResolvedValue(hash);
+    const start = Date.now();
+    const now = jest.spyOn(Date, 'now').mockReturnValue(start);
+    try {
+      await request(app.getHttpServer())
+        .post('/auth/register')
+        .send(registration())
+        .expect(201);
+      for (let i = 0; i < 2; i++)
+        await request(app.getHttpServer())
+          .post('/auth/register')
+          .send(registration())
+          .expect(409);
+      limitedResponse(
+        await request(app.getHttpServer())
+          .post('/auth/register')
+          .send(registration()),
+      );
+      expect(prisma.user.create).toHaveBeenCalledTimes(3);
+      now.mockReturnValue(start + 60 * 60_000);
+      await request(app.getHttpServer())
+        .post('/auth/register')
+        .send(registration())
+        .expect(409);
+    } finally {
+      hashPassword.mockRestore();
+      now.mockRestore();
+    }
+  });
+
+  it('enforces the aggregate login limit despite changing both origin and email', async () => {
+    const verify = jest
+      .spyOn(app.get(PasswordService), 'verify')
+      .mockResolvedValue(false);
+    const start = Date.now();
+    const now = jest.spyOn(Date, 'now').mockReturnValue(start);
+    const attempt = (i: number) =>
+      request(app.getHttpServer())
+        .post('/auth/login')
+        .set('CF-Connecting-IP', `203.0.113.${i + 1}`)
+        .send({ email: `absent-${i}@example.com`, password: 'wrong' });
+    try {
+      for (let i = 0; i < 60; i++) await attempt(i).expect(401);
+      limitedResponse(await attempt(60));
+      expect(verify).toHaveBeenCalledTimes(60);
+      now.mockReturnValue(start + 60_000);
+      await attempt(61).expect(401);
+    } finally {
+      verify.mockRestore();
+      now.mockRestore();
+    }
+  });
+
+  it('enforces the aggregate register limit before bcrypt/persistence despite identity rotation', async () => {
+    const hashPassword = jest
+      .spyOn(app.get(PasswordService), 'hash')
+      .mockResolvedValue(hash);
+    const start = Date.now();
+    const now = jest.spyOn(Date, 'now').mockReturnValue(start);
+    const attempt = (i: number) =>
+      request(app.getHttpServer())
+        .post('/auth/register')
+        .set('CF-Connecting-IP', `203.0.113.${i + 1}`)
+        .send({
+          ...registration(),
+          email: `new-${i}@example.com`,
+          whatsappNumber: `+55829999${String(i).padStart(5, '0')}`,
+        });
+    try {
+      for (let i = 0; i < 20; i++) await attempt(i).expect(201);
+      limitedResponse(await attempt(20));
+      expect(hashPassword).toHaveBeenCalledTimes(20);
+      expect(prisma.user.create).toHaveBeenCalledTimes(20);
+      now.mockReturnValue(start + 60_000);
+      await attempt(21).expect(201);
+    } finally {
+      hashPassword.mockRestore();
+      now.mockRestore();
+    }
+  });
+
+  it('keeps login and register buckets independent', async () => {
+    const verify = jest
+      .spyOn(app.get(PasswordService), 'verify')
+      .mockResolvedValue(false);
+    const hashPassword = jest
+      .spyOn(app.get(PasswordService), 'hash')
+      .mockResolvedValue(hash);
+    try {
+      for (let i = 0; i < 5; i++) await login('master', 'wrong').expect(401);
+      limitedResponse(await login('master', 'wrong'));
+      await request(app.getHttpServer())
+        .post('/auth/register')
+        .send(registration())
+        .expect(201);
+      for (let i = 0; i < 2; i++)
+        await request(app.getHttpServer())
+          .post('/auth/register')
+          .send(registration())
+          .expect(409);
+      limitedResponse(
+        await request(app.getHttpServer())
+          .post('/auth/register')
+          .send(registration()),
+      );
+      await login('admin', 'wrong').expect(401);
+    } finally {
+      verify.mockRestore();
+      hashPassword.mockRestore();
+    }
+  });
+
+  it('does not throttle unrelated public or private handlers', async () => {
+    const bearer = token();
+    for (let i = 0; i < 65; i++) {
+      await request(app.getHttpServer()).get('/health').expect(200);
+      await request(app.getHttpServer())
+        .get('/auth/me')
+        .set('Authorization', `Bearer ${bearer}`)
+        .expect(200);
+    }
   });
   it('protects private handlers even when they do not declare CurrentUserId', async () => {
     await request(app.getHttpServer())
@@ -725,6 +934,111 @@ describe('Authentication with real Bearer JWT (e2e)', () => {
         .expect(200);
     }
   });
+
+  it('prevents MASTER B from reading or mutating the objects created by MASTER A', async () => {
+    seed('master-b', { clubRoles: [{ role: 'MASTER' }] });
+    const ownerToken = (await login().expect(200)).body.accessToken;
+    const otherToken = (await login('master-b').expect(200)).body.accessToken;
+    const campaign = await request(app.getHttpServer())
+      .post('/campaigns')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ title: 'Owner campaign', gameSystemId: 'system' })
+      .expect(201);
+    const oneShot = await request(app.getHttpServer())
+      .post('/one-shots')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send(masterOperations[1].body)
+      .expect(201);
+    const session = await request(app.getHttpServer())
+      .post(`/campaigns/${campaign.body.id}/sessions`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ scheduledAt: new Date(Date.now() + 86_400_000).toISOString() })
+      .expect(201);
+    jest.clearAllMocks();
+    const operations: [string, string, Record<string, unknown>?][] = [
+      ...[campaign.body.id, oneShot.body.id].flatMap(
+        (id, index): [string, string, Record<string, unknown>?][] => {
+          const path = `/${index === 0 ? 'campaigns' : 'one-shots'}/${id}`;
+          return [
+            ['get', path],
+            ['patch', path, { title: 'Other user edit' }],
+            ['delete', path],
+            ['post', `${path}/publish`],
+            [
+              'patch',
+              `${path}/status`,
+              index === 0
+                ? { status: 'ARCHIVED' }
+                : { status: 'CANCELLED', reason: 'Other user' },
+            ],
+          ];
+        },
+      ),
+      ['get', `/sessions/${session.body.id}`],
+      ['patch', `/sessions/${session.body.id}`, { title: 'Other edit' }],
+      ['delete', `/sessions/${session.body.id}`],
+      [
+        'patch',
+        `/sessions/${session.body.id}/status`,
+        { status: 'CANCELLED', reason: 'Other user' },
+      ],
+      ['get', `/campaigns/${campaign.body.id}/sessions`],
+      [
+        'post',
+        `/campaigns/${campaign.body.id}/sessions`,
+        { scheduledAt: new Date(Date.now() + 86_400_000).toISOString() },
+      ],
+    ];
+    for (const [method, path, body] of operations) {
+      const response = await request(app.getHttpServer())
+        [method](path)
+        .set('Authorization', `Bearer ${otherToken}`)
+        .send(body ?? {})
+        .expect(403);
+      expect(response.body.code).toBe('ADMIN_ROLE_REQUIRED');
+    }
+    expect(prisma.campaign.update).not.toHaveBeenCalled();
+    expect(prisma.oneShot.update).not.toHaveBeenCalled();
+    expect(prisma.session.update).not.toHaveBeenCalled();
+    expect(prisma.session.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects privileged fields nested in the OneShot Session DTO', async () => {
+    await request(app.getHttpServer())
+      .post('/one-shots')
+      .set('Authorization', `Bearer ${token()}`)
+      .send({
+        ...masterOperations[1].body,
+        session: {
+          ...masterOperations[1].body.session,
+          campaignId: 'someone-else',
+          oneShotId: 'someone-else',
+        },
+      })
+      .expect(400);
+    expect(prisma.oneShot.create).not.toHaveBeenCalled();
+    expect(prisma.session.create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'masterId',
+    'approvalStatus',
+    'reviewedById',
+    'authVersion',
+    'passwordHash',
+    'createdAt',
+    'systemRole',
+  ])(
+    'rejects mass assignment of %s on a normal domain endpoint',
+    async (field) => {
+      await request(app.getHttpServer())
+        .post('/campaigns')
+        .set('Authorization', `Bearer ${token()}`)
+        .send({ ...masterOperations[0].body, [field]: 'untrusted' })
+        .expect(400);
+      expect(prisma.campaign.create).not.toHaveBeenCalled();
+    },
+  );
   it.each([
     '/tables/me',
     '/campaigns/campaign',

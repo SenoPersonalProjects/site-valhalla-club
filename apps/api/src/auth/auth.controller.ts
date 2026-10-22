@@ -13,17 +13,20 @@ import { CurrentUserId } from '../common/http/current-user-id.decorator';
 import { LoginDto, RegisterDto, RegistrationReviewDto } from './auth.dto';
 import { AuthService } from './auth.service';
 import { Public } from './public.decorator';
+import { AuthRateLimit } from './auth-rate-limit';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
   @Public()
   @Post('register')
+  @AuthRateLimit('register')
   register(@Body() dto: RegisterDto) {
     return this.auth.register(dto);
   }
   @Public()
   @Post('login')
+  @AuthRateLimit('login')
   @HttpCode(200)
   login(@Body() dto: LoginDto) {
     return this.auth.login(dto);

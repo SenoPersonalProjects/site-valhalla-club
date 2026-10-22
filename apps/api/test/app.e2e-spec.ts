@@ -7,6 +7,7 @@ import {
   INestApplication,
   NotFoundException,
   Post,
+  Param,
 } from '@nestjs/common';
 import { ExecutionContext } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -62,6 +63,23 @@ class ErrorTestController {
   @Get('unexpected')
   unexpectedError(): never {
     throw new Error('database password=super-secret');
+  }
+  @Get('http-internal')
+  httpInternalError(): never {
+    throw new HttpException(
+      {
+        code: 'PRIVATE_DATABASE_DETAIL',
+        message: 'database password=super-secret',
+      },
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
+  }
+  @Get('parameter/:value')
+  parameterError(@Param('value') _value: string): never {
+    throw new HttpException(
+      { code: 'INVALID_INPUT', message: 'Dados inválidos' },
+      HttpStatus.BAD_REQUEST,
+    );
   }
 }
 
@@ -500,6 +518,73 @@ describe('AppController (e2e)', () => {
     );
   });
 
+  it('sanitizes even HTTP 500 exceptions with private messages and custom codes', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/__test/errors/http-internal')
+      .expect(500);
+    expect(response.body).toMatchObject({
+      code: 'INTERNAL_SERVER_ERROR',
+      message: 'Internal server error',
+    });
+    expect(JSON.stringify(response.body)).not.toContain('super-secret');
+    expect(JSON.stringify(response.body)).not.toContain(
+      'PRIVATE_DATABASE_DETAIL',
+    );
+    expect(JSON.stringify(structuredLogger.error.mock.calls)).not.toContain(
+      'super-secret',
+    );
+  });
+
+  it('does not echo arbitrary paths, query credentials or validation property names', async () => {
+    const secret = 'private-path-credential';
+    const missing = await request(app.getHttpServer())
+      .get(`/missing/${secret}?password=private-query-credential`)
+      .expect(404);
+    const validation = await request(app.getHttpServer())
+      .post('/auth/register')
+      .send({ [secret]: 'private-body-credential' })
+      .expect(400);
+    expect(validation.body).toMatchObject({
+      code: 'BAD_REQUEST',
+      message: 'Dados de entrada inválidos',
+    });
+    const output = JSON.stringify([
+      missing.body,
+      validation.body,
+      structuredLogger.error.mock.calls,
+    ]);
+    expect(output).not.toContain(secret);
+    expect(output).not.toContain('private-query-credential');
+    expect(output).not.toContain('private-body-credential');
+  });
+
+  it('does not echo malformed JSON containing credentials', async () => {
+    const secret = 'malformed-json-password-secret';
+    const response = await request(app.getHttpServer())
+      .post('/auth/register')
+      .set('Content-Type', 'application/json')
+      .send(`${secret} is not JSON`)
+      .expect(400);
+    expect(response.body.message).toBe('Dados de entrada inválidos');
+    expect(
+      JSON.stringify([response.body, structuredLogger.error.mock.calls]),
+    ).not.toContain(secret);
+  });
+
+  it('uses route templates instead of personal path parameters in logs and errors', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/__test/errors/parameter/private-person@example.com')
+      .expect(400);
+    expect(response.body.path).toBe('/__test/errors/parameter/:value');
+    const serialized = JSON.stringify([
+      response.body,
+      structuredLogger.info.mock.calls,
+      structuredLogger.error.mock.calls,
+    ]);
+    expect(serialized).not.toContain('private-person@example.com');
+    expect(serialized).toContain('/__test/errors/parameter/:value');
+  });
+
   it('traces unmatched routes without logging query secrets', async () => {
     const requestId = 'missing-route-request';
 
@@ -514,9 +599,9 @@ describe('AppController (e2e)', () => {
     expect(body).toEqual({
       statusCode: 404,
       code: 'NOT_FOUND',
-      message: 'Cannot GET /missing-resource?token=must-not-be-logged',
+      message: 'Recurso não encontrado',
       requestId,
-      path: '/missing-resource',
+      path: '/[unmatched]',
     });
 
     expectValidTimestamp(timestamp);
@@ -526,7 +611,7 @@ describe('AppController (e2e)', () => {
     expect(failureContext).toMatchObject({
       requestId,
       method: 'GET',
-      route: '/missing-resource',
+      route: '/[unmatched]',
       statusCode: 404,
     });
 

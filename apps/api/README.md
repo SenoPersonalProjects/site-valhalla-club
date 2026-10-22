@@ -5,6 +5,9 @@ Fase 2.
 
 ## Estado atual
 
+Revisão e pendências de hardening: [segurança da Fase 2](../../docs/security/security-review-fase2.md),
+incluindo os limites de login/cadastro e o débito TLS local.
+
 Além das rotas `GET /` e `GET /health`, a API implementa campanhas, sessões,
 one-shots, consulta das mesas do usuário, aprovação administrativa e publicação.
 Cadastro, revisão inicial e autenticação JWT estão implementados. Um guard global
