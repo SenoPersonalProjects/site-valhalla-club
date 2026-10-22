@@ -7,13 +7,18 @@ Fase 2.
 
 Além das rotas `GET /` e `GET /health`, a API implementa campanhas, sessões,
 one-shots, consulta das mesas do usuário, aprovação administrativa e publicação.
-O schema inicial e sua migration estão versionados. Ainda não há autenticação ou
-JWT funcional. Rotas privadas exigem `request.user.id`, contrato da futura
-infraestrutura confiável de autenticação. Sem esse contexto, falham fechadas com
-`401 USER_CONTEXT_REQUIRED`, inclusive quando o cliente envia apenas `x-user-id`.
-Nenhum header arbitrário é tratado como identidade e nenhum código de produção
-fabrica `request.user` a partir de dados do cliente. As rotas públicas continuam
-acessíveis normalmente. A landing pública do MVP não depende desta API em runtime.
+Cadastro, revisão inicial e autenticação JWT estão implementados. Um guard global
+exige `Authorization: Bearer <token>` nas rotas privadas e popula `request.user.id`
+após verificar assinatura, expiração, versão e estado atual APPROVED no banco.
+Sem Bearer, retorna `401 AUTH_TOKEN_REQUIRED`; `x-user-id` não autentica.
+`CurrentUserId` preserva a defesa adicional `401 USER_CONTEXT_REQUIRED` se não
+receber contexto válido. Logout invalida todos os JWTs anteriores da conta.
+As rotas públicas continuam acessíveis. A landing do MVP não depende desta API.
+
+O [contrato de autenticação](../../docs/api/auth.md) detalha cadastro PENDING,
+aprovação/rejeição por ADMIN/DEV, hash bcrypt, projeções e códigos de erro.
+Administração completa de usuários e guards genéricos de roles não fazem parte
+desta entrega. O cadastro não concede papéis de clube automaticamente.
 
 Consulte a [documentação de campanhas, sessões e one-shots](../../docs/api/tables-domain.md).
 
@@ -113,13 +118,21 @@ migrations locais, use um banco local ou isolado. Solicite acesso à conexão de
 homologação por canal privado autorizado; nunca registre credenciais em PR,
 ClickUp, documentação ou logs. As variáveis presentes são `DATABASE_URL`, `PORT`,
 `NODE_ENV`, `JWT_SECRET`, `JWT_EXPIRES_IN`, `FRONTEND_URL` e `CORS_ORIGIN`.
-JWT e integração/CORS ainda são configurações reservadas, não recursos prontos.
+`JWT_SECRET` é obrigatório, sem fallback, com pelo menos 32 bytes; use um segredo
+aleatório forte administrado pelo ambiente. `JWT_EXPIRES_IN` é obrigatório e aceita
+segundos positivos ou sufixos `s`, `m`, `h`, `d` (exemplo: `15m`). A inicialização
+falha com configuração ausente/inválida. Integração/CORS continuam reservados.
 Render administra os secrets de homologação; Railway deverá administrar os da
 futura produção. Rotação por configuração, sem alteração de código.
 
 `DATABASE_URL` é carregada pelo `ConfigModule` e usada pelo `PrismaService`. A API tenta conectar ao PostgreSQL ao iniciar e encerra o pool junto com a aplicação. Consulte o [setup local](../../docs/setup-local.md) e a [documentação do Prisma e PostgreSQL](../../docs/database/prisma-postgresql-e-portabilidade-mysql.md).
 
 ## Migrations
+
+`20261021120000_add_user_auth_version` acrescenta somente `User.authVersion`
+com default 0. A migration inicial permanece intacta. Nesta implementação nenhuma
+migration foi aplicada: valide/revise e aplique pelo fluxo autorizado do ambiente
+antes de executar a API. O histórico PostgreSQL não deve ser aplicado no MySQL.
 
 - Desenvolvimento: `npm run prisma:migrate:dev -- --name nome_da_migration`.
 - Homologação e produção: `npm run prisma:migrate:deploy`.

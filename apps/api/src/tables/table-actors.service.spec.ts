@@ -58,6 +58,26 @@ describe('TableActorsService', () => {
     await expect(service.assertAdministrator('dev-1')).resolves.toBeUndefined();
   });
 
+  it('checks administrative authority with the supplied transaction only', async () => {
+    const findUnique = jest
+      .fn()
+      .mockResolvedValue({
+        status: AccountStatus.APPROVED,
+        systemRole: SystemRole.ADMIN,
+      });
+    const transaction = {
+      user: { findUnique },
+    } as unknown as Prisma.TransactionClient;
+    await expect(
+      service.assertAdministrator('admin-1', transaction),
+    ).resolves.toBeUndefined();
+    expect(findUnique).toHaveBeenCalledWith({
+      where: { id: 'admin-1' },
+      select: { status: true, systemRole: true },
+    });
+    expect(userRepository.findUnique).not.toHaveBeenCalled();
+  });
+
   it('rejects an approved system user with only the club administrator role', async () => {
     userRepository.findUnique.mockResolvedValue({
       status: AccountStatus.APPROVED,

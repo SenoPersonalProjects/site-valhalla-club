@@ -40,8 +40,11 @@ export class TableActorsService {
     }
   }
 
-  async assertAdministrator(userId: string): Promise<void> {
-    const user = await this.prisma.user.findUnique({
+  async assertAdministrator(
+    userId: string,
+    client: Pick<Prisma.TransactionClient, 'user'> = this.prisma,
+  ): Promise<void> {
+    const user = await client.user.findUnique({
       where: { id: userId },
       select: {
         status: true,

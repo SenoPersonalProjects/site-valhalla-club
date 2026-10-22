@@ -65,13 +65,13 @@ Tipos de commit: `feat`, `fix`, `docs`, `chore`, `style`, `refactor` e `test`.
 ## Back-end e banco
 
 A API possui a base NestJS, observabilidade, Prisma e o domínio de campanhas,
-sessões e one-shots. A autenticação e o JWT ainda não estão implementados. Até
-essa integração, as rotas privadas falham fechadas com `401 USER_CONTEXT_REQUIRED`.
-`request.user.id` é o contrato esperado da futura infraestrutura confiável de
-autenticação. Nenhum header arbitrário, incluindo `x-user-id`, é tratado como
-identidade. Não criar fallback de produção que fabrique `request.user` com dados
-do cliente. Rotas públicas continuam acessíveis normalmente; contexto simulado
-de autenticação pertence exclusivamente ao código de teste.
+sessões e one-shots. Cadastro, aprovação inicial e JWT estão implementados.
+Guard global exige Bearer válido nas rotas privadas, consulta status/versão da
+conta no banco e fornece `request.user.id`. Logout invalida versões anteriores.
+`x-user-id` não autentica; não criar fallback de identidade a partir de dados não
+validados do cliente. Rotas públicas usam `@Public()` explícito. Contexto simulado
+pertence exclusivamente a overrides de teste; E2E de auth usa JWT real.
+Configuração e limites de escopo: [contrato de auth](api/auth.md).
 
 PostgreSQL e Prisma ORM são as decisões atuais para homologação. Schema e
 migrations são versionados. Em desenvolvimento, use `prisma migrate dev`; em

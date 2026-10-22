@@ -76,10 +76,20 @@ npm run build
 A API escuta `PORT` (ou 3000 se ela não for definida), expõe `/`, `/health` e
 rotas do [domínio de mesas](api/tables-domain.md), e conecta ao PostgreSQL ao
 iniciar. Use banco local ou isolado para desenvolvimento; solicite acesso à
-homologação por canal privado autorizado. Auth/JWT, CORS e integração da landing
-com a API ainda não estão implementados. Rotas privadas exigem contexto confiável
-`request.user.id` e falham fechadas com `401 USER_CONTEXT_REQUIRED` sem ele;
-`x-user-id` não autentica. Rotas públicas continuam acessíveis.
+homologação por canal privado autorizado. Cadastro, aprovação inicial e JWT estão
+implementados; CORS e integração da landing com a API continuam fora desta entrega.
+Configure `JWT_SECRET` aleatório com pelo menos 32 bytes e `JWT_EXPIRES_IN`
+(segundos positivos ou `s/m/h/d`, por exemplo `15m`) no ambiente local. Não há
+secret padrão; sem configuração válida a inicialização falha. Nunca copie o
+secret para o repositório, PR ou logs. Rotação por ambiente invalida tokens
+assinados pela chave anterior e exige novo login.
+
+O cadastro cria PENDING; um ADMIN/DEV de sistema APPROVED precisa revisar o registro
+antes do login. Não há bootstrap público de administrador nem concessão de roles
+no cadastro; provisionamento inicial de um operador é um procedimento operacional
+controlado, fora desta API. Rotas privadas usam Bearer e `request.user.id` validado;
+`x-user-id` não autentica. Ver [contrato de auth](api/auth.md), incluindo rotas
+públicas e logout que invalida todos os tokens anteriores.
 
 ## PostgreSQL e Prisma ORM
 
@@ -87,6 +97,11 @@ Prisma 7 está integrado à API, configurado para PostgreSQL, com schema inicial
 da Fase 2 e migration inicial versionada e aplicada em homologação. Logging
 estruturado/Request ID e domínio base de Campaign, Session e OneShot estão
 implementados. Consulte [a documentação de banco](database/prisma-postgresql-e-portabilidade-mysql.md).
+
+A nova migration `20261021120000_add_user_auth_version` adiciona somente o contador
+de invalidação de JWT. Foi criada/revisada sem aplicação ao banco nesta tarefa;
+é necessário aplicá-la pelo fluxo autorizado antes de executar esta versão.
+Não foi executado `migrate dev`, pois não se comprovou conexão local/isolada.
 
 Para novas alterações de modelo aprovadas, o fluxo local usa exclusivamente
 um banco de desenvolvimento:

@@ -208,6 +208,7 @@ model User {
   // Nullable apenas para permitir remoção da credencial
   // durante a anonimização.
   passwordHash String?
+  authVersion  Int     @default(0)
 
   status     AccountStatus @default(PENDING)
   systemRole SystemRole    @default(USER)

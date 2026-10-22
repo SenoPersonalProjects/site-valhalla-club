@@ -13,7 +13,7 @@ não provisiona serviços nem comprova disponibilidade contínua dos ambientes.
 | Prisma 7 | Integrado à API, client gerado no build | Provider PostgreSQL e adapter `PrismaPg` | Exigirá provider, adapter e migrations compatíveis com MySQL |
 | Domínio base | Campaign, Session e OneShot implementados | Requer validação funcional a cada release | Sem declaração de produção autenticada |
 | Logging / Request ID | Implementados | Disponíveis no código; exportação/retenção operacional a confirmar | Estratégia de coleta a validar |
-| Autenticação/JWT | Não implementada | Rotas privadas falham fechadas | Não disponível |
+| Autenticação/JWT | Cadastro, revisão inicial e Bearer implementados no código | Exige configurar secrets e aplicar migration de authVersion pelo fluxo autorizado | Deploy autenticado não declarado |
 | Métricas consolidadas | Definidas para coleta | Sem baseline neste repositório | Dimensionamento pendente |
 
 A publicação do MVP é independente da API: a landing atual usa conteúdo estático.
@@ -48,11 +48,11 @@ credenciais Prisma. Next.js responde pela apresentação. NestJS valida entrada,
 autorização, regras de negócio e transações; Prisma realiza a persistência.
 Banco e serviços de hosting não substituem a autorização da API.
 
-`request.user.id` é apenas o contrato esperado da futura infraestrutura confiável
-de autenticação. Hoje, sem esse contexto, rotas privadas retornam
-`401 USER_CONTEXT_REQUIRED`; `x-user-id` não autentica. ADMIN/DEV de sistema exigem
+`request.user.id` é preenchido pelo guard global após validar JWT e consultar
+status APPROVED e authVersion no banco. Sem Bearer, rotas privadas retornam
+`401 AUTH_TOKEN_REQUIRED`; `x-user-id` não autentica. ADMIN/DEV de sistema exigem
 conta aprovada; papéis de clube não concedem acesso administrativo por si sós.
-Ver [contrato de mesas](../api/tables-domain.md).
+Ver [contrato de mesas](../api/tables-domain.md) e [autenticação](../api/auth.md).
 
 ## Responsabilidades e dependências externas
 
@@ -122,8 +122,8 @@ Inventário baseado nos exemplos e consumidores atuais, **somente nomes**:
 | API | `PORT` | Porta de escuta |
 | API | `NODE_ENV` | Contexto de execução; presente no exemplo |
 | API | `DATABASE_URL` | Conexão Prisma/PostgreSQL; secret obrigatório para iniciar API |
-| API | `JWT_SECRET` | Reservada; JWT não implementado |
-| API | `JWT_EXPIRES_IN` | Reservada; JWT não implementado |
+| API | `JWT_SECRET` | Obrigatória; chave aleatória forte com pelo menos 32 bytes; sem fallback |
+| API | `JWT_EXPIRES_IN` | Obrigatória; duração positiva em segundos ou s/m/h/d |
 | API | `FRONTEND_URL` | Reservada para integração |
 | API | `CORS_ORIGIN` | Reservada; não implica CORS configurado no código |
 
@@ -132,7 +132,8 @@ secrets em PR, ClickUp, documentação ou logs, inclusive dumps de ambiente e UR
 de conexão. Solicitar acesso por canal privado autorizado. Rotação deve ocorrer
 pela configuração do ambiente, sem alterar código: trocar a credencial, aplicar
 restart/redeploy quando necessário, validar funcionamento e revogar a anterior.
-Rotação de chaves de autenticação exigirá procedimento próprio quando implementada.
+Rotação de JWT_SECRET por ambiente/restart invalida todos os tokens da chave
+anterior e exige novo login; logout individual incrementa authVersion no banco.
 
 ## Riscos e critérios de decisão
 

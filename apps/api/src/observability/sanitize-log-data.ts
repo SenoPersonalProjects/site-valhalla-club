@@ -4,6 +4,12 @@ const CIRCULAR_LOG_VALUE = '[Circular]';
 
 const SENSITIVE_KEYS = new Set([
   'password',
+  'passwordhash',
+  'secret',
+  'jwtsecret',
+  'databaseurl',
+  'birthdate',
+  'whatsappnumber',
   'passwordconfirmation',
   'currentpassword',
   'newpassword',

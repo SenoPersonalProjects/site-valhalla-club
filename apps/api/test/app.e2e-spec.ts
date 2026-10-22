@@ -8,7 +8,9 @@ import {
   NotFoundException,
   Post,
 } from '@nestjs/common';
-import { Request, Response, NextFunction } from 'express';
+import { ExecutionContext } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { AuthGuard } from '../src/auth/auth.guard';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
@@ -137,22 +139,28 @@ describe('AppController (e2e)', () => {
     })
       .overrideProvider(PrismaService)
       .useValue(prismaMock)
+      .overrideProvider(ConfigService)
+      .useValue({
+        get: (key: string) =>
+          ({
+            JWT_SECRET: 'domain-tests-only-secret-32-bytes-minimum',
+            JWT_EXPIRES_IN: '15m',
+          })[key],
+      })
+      // Domain-only suite: explicit guard override, never an HTTP identity header.
+      // auth.e2e-spec.ts exercises the real global guard and signed Bearer tokens.
+      .overrideProvider(AuthGuard)
+      .useValue({
+        canActivate: (context: ExecutionContext) => {
+          context.switchToHttp().getRequest().user = trustedUser;
+          return true;
+        },
+      })
       .overrideProvider(StructuredLoggerService)
       .useValue(structuredLogger)
       .compile();
 
     app = moduleFixture.createNestApplication();
-    // Test infrastructure supplies context from test state, never from HTTP input.
-    app.use(
-      (
-        req: Request & { user?: { id?: unknown } },
-        _res: Response,
-        next: NextFunction,
-      ) => {
-        req.user = trustedUser;
-        next();
-      },
-    );
     await app.init();
     structuredLogger.info.mockClear();
   });

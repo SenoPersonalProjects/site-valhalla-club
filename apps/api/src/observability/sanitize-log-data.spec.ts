@@ -1,6 +1,21 @@
 import { REDACTED_LOG_VALUE, sanitizeLogData } from './sanitize-log-data';
 
 describe('sanitizeLogData', () => {
+  it('redacts authentication configuration and private profile fields even outside a body', () => {
+    const sensitive = {
+      passwordHash: 'hash',
+      JWT_SECRET: 'secret',
+      secret: 'secret',
+      DATABASE_URL: 'database',
+      birthDate: '1990-01-01',
+      whatsappNumber: '+5582999999999',
+    };
+    expect(sanitizeLogData(sensitive)).toEqual(
+      Object.fromEntries(
+        Object.keys(sensitive).map((key) => [key, REDACTED_LOG_VALUE]),
+      ),
+    );
+  });
   it('redacts sensitive fields recursively without changing the source', () => {
     const source = {
       requestId: 'request-123',
