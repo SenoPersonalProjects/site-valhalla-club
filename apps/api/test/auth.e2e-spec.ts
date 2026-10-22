@@ -172,6 +172,30 @@ describe('Authentication with real Bearer JWT (e2e)', () => {
         }),
       },
       sessionParticipant: { findMany: jest.fn().mockResolvedValue([]) },
+      profile: {
+        update: jest.fn(async ({ where, data, select }) => {
+          const user = users.get(where.userId);
+          if (!user?.profile)
+            throw new Prisma.PrismaClientKnownRequestError(
+              'private missing profile',
+              { code: 'P2025', clientVersion: '7' },
+            );
+          if (
+            data.whatsappNumber &&
+            [...users.values()].some(
+              (other) =>
+                other.id !== user.id &&
+                other.profile?.whatsappNumber === data.whatsappNumber,
+            )
+          )
+            throw new Prisma.PrismaClientKnownRequestError(
+              'private uniqueness detail',
+              { code: 'P2002', clientVersion: '7' },
+            );
+          Object.assign(user.profile, data);
+          return project(user.profile, select);
+        }),
+      },
       $transaction: async (operation: any) =>
         typeof operation === 'function'
           ? operation(prisma)
@@ -607,6 +631,308 @@ describe('Authentication with real Bearer JWT (e2e)', () => {
       .get('/__test/jwt-context/without-current-user')
       .set('Authorization', `Bearer ${token()}`)
       .expect(200, { private: true });
+  });
+
+  it('reuses auth/me for the own profile and never accepts a different identity from headers/query/body', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/auth/me?userId=admin')
+      .set('Authorization', `Bearer ${token()}`)
+      .set('x-user-id', 'admin')
+      .send({ userId: 'admin' })
+      .expect(200);
+    expect(response.body).toMatchObject({
+      id: 'master',
+      profile: { displayName: 'master' },
+    });
+    for (const field of [
+      'passwordHash',
+      'authVersion',
+      'reviewedById',
+      'reviewNote',
+      'suspensionReason',
+    ])
+      expect(JSON.stringify(response.body)).not.toContain(field);
+  });
+  it.each(['/account/profile', '/account/deletion-request'])(
+    'requires real Bearer for %s and ignores x-user-id',
+    async (path) => {
+      const method = path.endsWith('profile') ? 'patch' : 'post';
+      const response = await request(app.getHttpServer())
+        [method](path)
+        .set('x-user-id', 'master')
+        .send({})
+        .expect(401);
+      expect(response.body.code).toBe('AUTH_TOKEN_REQUIRED');
+    },
+  );
+  it('updates only the authenticated profile and preserves birthDate/email/status/roles', async () => {
+    const before = structuredClone(users.get('master'));
+    const other = structuredClone(users.get('admin'));
+    const response = await request(app.getHttpServer())
+      .patch('/account/profile?userId=admin')
+      .set('Authorization', `Bearer ${token()}`)
+      .set('x-user-id', 'admin')
+      .send({
+        displayName: ' Updated Player ',
+        whatsappNumber: '0044 (7700) 900001',
+      })
+      .expect(200);
+    expect(response.body).toEqual({
+      displayName: 'Updated Player',
+      whatsappNumber: '+447700900001',
+      birthDate: before.profile.birthDate.toISOString(),
+    });
+    expect(users.get('admin')).toEqual(other);
+    expect(users.get('master')).toMatchObject({
+      status: before.status,
+      email: before.email,
+      systemRole: before.systemRole,
+      clubRoles: before.clubRoles,
+      authVersion: before.authVersion,
+    });
+    expect(prisma.profile.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { userId: 'master' } }),
+    );
+  });
+  it.each([
+    {},
+    { displayName: '' },
+    { displayName: '   ' },
+    { displayName: null },
+    { displayName: 'a'.repeat(101) },
+    { whatsappNumber: 'no-ddi' },
+    { whatsappNumber: null },
+  ])('rejects invalid profile input %j', async (body) => {
+    await request(app.getHttpServer())
+      .patch('/account/profile')
+      .set('Authorization', `Bearer ${token()}`)
+      .send(body)
+      .expect(400);
+    expect(prisma.profile.update).not.toHaveBeenCalled();
+    expect(prisma.user.updateMany).not.toHaveBeenCalled();
+  });
+  it('rejects a conflicting WhatsApp with a generic domain error', async () => {
+    const response = await request(app.getHttpServer())
+      .patch('/account/profile')
+      .set('Authorization', `Bearer ${token()}`)
+      .send({ whatsappNumber: users.get('admin').profile.whatsappNumber })
+      .expect(409);
+    expect(response.body.code).toBe('PROFILE_CONFLICT');
+    expect(JSON.stringify(response.body)).not.toMatch(
+      /private uniqueness|admin@example|passwordHash|authVersion/,
+    );
+    expect(users.get('master').profile.whatsappNumber).toBe('+5582999990002');
+  });
+  it.each([
+    'userId',
+    'id',
+    'email',
+    'birthDate',
+    'status',
+    'systemRole',
+    'clubRoles',
+    'authVersion',
+    'reviewedById',
+    'suspendedById',
+    'createdAt',
+    'updatedAt',
+    'deletionRequestedAt',
+    'deletionExpiresAt',
+    'anonymizedAt',
+  ])('rejects privileged/immutable profile field %s', async (field) => {
+    await request(app.getHttpServer())
+      .patch('/account/profile')
+      .set('Authorization', `Bearer ${token()}`)
+      .send({ displayName: 'Valid', [field]: 'untrusted' })
+      .expect(400);
+    expect(prisma.profile.update).not.toHaveBeenCalled();
+    expect(prisma.user.updateMany).not.toHaveBeenCalled();
+  });
+  it.each(['userId', 'status', 'deletionExpiresAt'])(
+    'does not accept deletion target/lifecycle field %s in the body',
+    async (field) => {
+      await request(app.getHttpServer())
+        .post('/account/deletion-request')
+        .set('Authorization', `Bearer ${token()}`)
+        .send({ [field]: 'admin' })
+        .expect(400);
+      expect(prisma.user.updateMany).not.toHaveBeenCalled();
+      expect(users.get('admin').status).toBe('APPROVED');
+    },
+  );
+  it.each(['get', 'patch', 'delete'])(
+    'offers no arbitrary profile path for third-party access (%s)',
+    async (method) => {
+      await request(app.getHttpServer())
+        [method]('/account/profile/admin')
+        .set('Authorization', `Bearer ${token()}`)
+        .send({ displayName: 'Other' })
+        .expect(404);
+      expect(prisma.profile.update).not.toHaveBeenCalled();
+    },
+  );
+  it('offers no arbitrary deletion path for third-party access', async () => {
+    await request(app.getHttpServer())
+      .post('/account/admin/deletion-request')
+      .set('Authorization', `Bearer ${token()}`)
+      .send({})
+      .expect(404);
+    expect(prisma.user.updateMany).not.toHaveBeenCalled();
+  });
+  it.each(['admin', 'master', 'dev'])(
+    'deletes only the own account for %s, revokes all old tokens and retains personal data/history for now',
+    async (id) => {
+      if (id === 'dev') seed('dev', { systemRole: 'DEV' });
+      const original = (await login(id).expect(200)).body.accessToken;
+      const second = token(id);
+      const before = structuredClone(users.get(id));
+      const otherId = id === 'admin' ? 'master' : 'admin';
+      const other = structuredClone(users.get(otherId));
+      const start = Date.now();
+      const response = await request(app.getHttpServer())
+        .post(`/account/deletion-request?userId=${otherId}`)
+        .set('Authorization', `Bearer ${original}`)
+        .set('x-user-id', otherId)
+        .send({})
+        .expect(200);
+      const end = Date.now();
+      expect(response.body).toEqual({
+        id,
+        status: 'DELETION_PENDING',
+        deletionRequestedAt: expect.any(String),
+        deletionExpiresAt: expect.any(String),
+      });
+      const requested = Date.parse(response.body.deletionRequestedAt);
+      expect(requested).toBeGreaterThanOrEqual(start);
+      expect(requested).toBeLessThanOrEqual(end);
+      expect(Date.parse(response.body.deletionExpiresAt) - requested).toBe(
+        90 * 86400000,
+      );
+      expect(users.get(id)).toMatchObject({
+        status: 'DELETION_PENDING',
+        authVersion: before.authVersion + 1,
+        email: before.email,
+        passwordHash: before.passwordHash,
+        profile: before.profile,
+        clubRoles: before.clubRoles,
+      });
+      expect(users.get(otherId)).toEqual(other);
+      for (const bearer of [original, second]) {
+        const denied = await request(app.getHttpServer())
+          .get('/auth/me')
+          .set('Authorization', `Bearer ${bearer}`)
+          .expect(401);
+        expect(denied.body.code).toBe('AUTH_ACCOUNT_UNAVAILABLE');
+      }
+      const repeated = await request(app.getHttpServer())
+        .post('/account/deletion-request')
+        .set('Authorization', `Bearer ${original}`)
+        .send({})
+        .expect(401);
+      expect(repeated.body.code).toBe('AUTH_ACCOUNT_UNAVAILABLE');
+      await request(app.getHttpServer())
+        .patch('/account/profile')
+        .set('Authorization', `Bearer ${original}`)
+        .send({ displayName: 'Too late' })
+        .expect(401);
+      expect(users.get(id).authVersion).toBe(before.authVersion + 1);
+      const blockedLogin = await login(id).expect(403);
+      expect(blockedLogin.body.code).toBe('ACCOUNT_DELETION_PENDING');
+      const logged = JSON.stringify([
+        logs.info.mock.calls,
+        logs.error.mock.calls,
+        logs.warn.mock.calls,
+      ]);
+      for (const sensitive of [
+        original,
+        second,
+        before.email,
+        before.profile.whatsappNumber,
+        before.passwordHash,
+        password,
+      ])
+        expect(logged).not.toContain(sensitive);
+    },
+  );
+  it.each([
+    'PENDING',
+    'REJECTED',
+    'SUSPENDED',
+    'DELETION_PENDING',
+    'ANONYMIZED',
+  ])(
+    'a current %s account cannot mutate profile or lifecycle using an old JWT',
+    async (status) => {
+      const bearer = token();
+      users.get('master').status = status;
+      await request(app.getHttpServer())
+        .patch('/account/profile')
+        .set('Authorization', `Bearer ${bearer}`)
+        .send({ displayName: 'Changed' })
+        .expect(401);
+      await request(app.getHttpServer())
+        .post('/account/deletion-request')
+        .set('Authorization', `Bearer ${bearer}`)
+        .send({})
+        .expect(401);
+      expect(prisma.user.updateMany).not.toHaveBeenCalled();
+    },
+  );
+  it('keeps profile errors and logs free of private payloads and internal failures', async () => {
+    prisma.profile.update.mockRejectedValueOnce(
+      new Error('private database password=synthetic-secret'),
+    );
+    const bearer = token();
+    const name = 'Private smoke name';
+    const phone = '+447700900009';
+    const response = await request(app.getHttpServer())
+      .patch('/account/profile')
+      .set('Authorization', `Bearer ${bearer}`)
+      .send({ displayName: name, whatsappNumber: phone })
+      .expect(500);
+    expect(response.body).toMatchObject({
+      code: 'INTERNAL_SERVER_ERROR',
+      message: 'Internal server error',
+    });
+    const output = JSON.stringify([
+      response.body,
+      logs.info.mock.calls,
+      logs.error.mock.calls,
+      logs.warn.mock.calls,
+    ]);
+    for (const sensitive of [
+      name,
+      phone,
+      bearer,
+      'synthetic-secret',
+      '1990-01-01',
+      'master@example.com',
+    ])
+      expect(output).not.toContain(sensitive);
+    await request(app.getHttpServer())
+      .patch('/account/profile')
+      .set('Authorization', `Bearer ${bearer}`)
+      .send({ displayName: name, whatsappNumber: phone })
+      .expect(200);
+    expect(
+      JSON.stringify([logs.info.mock.calls, logs.error.mock.calls]),
+    ).not.toContain(phone);
+  });
+
+  it('allows retaining the same WhatsApp and returns a safe 404 if the Profile is missing', async () => {
+    await request(app.getHttpServer())
+      .patch('/account/profile')
+      .set('Authorization', `Bearer ${token()}`)
+      .send({ whatsappNumber: users.get('master').profile.whatsappNumber })
+      .expect(200);
+    users.get('master').profile = null;
+    const response = await request(app.getHttpServer())
+      .patch('/account/profile')
+      .set('Authorization', `Bearer ${token()}`)
+      .send({ displayName: 'Name' })
+      .expect(404);
+    expect(response.body.code).toBe('PROFILE_NOT_FOUND');
+    expect(JSON.stringify(response.body)).not.toContain('private missing');
   });
   it('does not distinguish unknown email and wrong password', async () => {
     const wrong = await login('master', 'wrong').expect(401);

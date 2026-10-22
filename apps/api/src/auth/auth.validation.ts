@@ -4,6 +4,13 @@ export const invalidRegistration = (code: string, message: string): never => {
   throw new BadRequestException({ code, message });
 };
 
+export function normalizeDisplayName(value: string): string {
+  const name = value.trim();
+  if (!name)
+    invalidRegistration('INVALID_DISPLAY_NAME', 'Informe o nome de exibição');
+  return name;
+}
+
 export function normalizeWhatsapp(value: string): string {
   const normalized = value
     .trim()

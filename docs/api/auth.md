@@ -44,6 +44,10 @@ máximo de 72 bytes UTF-8 para evitar truncamento do bcrypt, inclusive no login.
 Não há exigência arbitrária de composição nem normalização da senha.
 Somente o hash é persistido; ele nunca é retornado.
 
+Edição do próprio perfil e solicitação de exclusão estão descritas no
+[ciclo de vida da conta](account-lifecycle.md). A consulta continua sendo
+`GET /auth/me`; recuperação e anonimização definitiva permanecem pendentes.
+
 ## Login, JWT e invalidação
 
 Login normaliza email e verifica o hash. Email inexistente e senha incorreta

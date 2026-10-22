@@ -12,6 +12,7 @@ import { APP_FILTER, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
+import { AccountsModule } from './accounts/accounts.module';
 import { CampaignsModule } from './campaigns/campaigns.module';
 import { OneShotsModule } from './one-shots/one-shots.module';
 import { ApiExceptionFilter } from './observability/api-exception.filter';
@@ -28,6 +29,7 @@ import { TablesModule } from './tables/tables.module';
     ScheduleModule.forRoot(),
     PrismaModule,
     AuthModule,
+    AccountsModule,
     TablesModule,
     CampaignsModule,
     SessionsModule,
