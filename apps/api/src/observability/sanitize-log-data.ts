@@ -5,6 +5,13 @@ const CIRCULAR_LOG_VALUE = '[Circular]';
 const SENSITIVE_KEYS = new Set([
   'password',
   'passwordhash',
+  'databasepassword',
+  'dbpassword',
+  'email',
+  'phone',
+  'phonenumber',
+  'reviewnote',
+  'suspensionreason',
   'secret',
   'jwtsecret',
   'databaseurl',

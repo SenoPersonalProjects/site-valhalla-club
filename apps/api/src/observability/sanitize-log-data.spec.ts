@@ -9,6 +9,11 @@ describe('sanitizeLogData', () => {
       DATABASE_URL: 'database',
       birthDate: '1990-01-01',
       whatsappNumber: '+5582999999999',
+      email: 'test-person@example.com',
+      phone: '+5582999999999',
+      reviewNote: 'private registration reason',
+      suspensionReason: 'private reason',
+      databasePassword: 'test-only-password',
     };
     expect(sanitizeLogData(sensitive)).toEqual(
       Object.fromEntries(

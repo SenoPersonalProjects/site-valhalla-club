@@ -4,6 +4,7 @@ import {
   NestModule,
   RequestMethod,
   ValidationPipe,
+  BadRequestException,
 } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -51,6 +52,12 @@ import { TablesModule } from './tables/tables.module';
           transform: true,
           whitelist: true,
           forbidNonWhitelisted: true,
+          // Constraint messages may echo attacker-controlled property names.
+          exceptionFactory: () =>
+            new BadRequestException({
+              code: 'BAD_REQUEST',
+              message: 'Dados de entrada inválidos',
+            }),
         }),
     },
   ],

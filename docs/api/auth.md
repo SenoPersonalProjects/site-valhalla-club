@@ -129,5 +129,19 @@ explícito do guard no TestingModule. Não existe middleware de identidade ou
 backdoor de produção. Integração contra banco real e aplicação da migration
 precisam ser validadas no ambiente autorizado antes do deploy.
 
-Follow-up da revisão de segurança: rate limiting em `/auth/login` e rate limiting /
-anti-spam em `/auth/register`. Esses controles não estão implementados nesta task.
+## Limites de login e cadastro
+
+Somente POST `/auth/login` e POST `/auth/register` usam `@nestjs/throttler`.
+Login: 5 tentativas por origem/email em 15 minutos e 60 por endpoint/minuto.
+Cadastro: 3 por origem/email/WhatsApp em 60 minutos e 20 por endpoint/minuto.
+Excesso retorna 429 `RATE_LIMIT_EXCEEDED` com mensagem genérica, sem dados da
+conta, IP ou contadores. Credenciais incorretas continuam retornando 401
+`INVALID_CREDENTIALS` quando o limite não foi excedido.
+
+No serviço público Render (`RENDER=true`), o tracker usa `CF-Connecting-IP`
+sobrescrito pelo ingresso Cloudflare; localmente usa o socket. Nunca usa
+`X-Forwarded-For`. Chaves individuais são HMACs efêmeros, sem PII em claro.
+Contadores são locais ao processo e reiniciam com deploy/restart; escala
+horizontal exigirá storage compartilhado e estratégia comum de chaves.
+Ver política, justificativas e limitações no
+[relatório de segurança](../security/security-review-fase2.md).

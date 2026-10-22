@@ -14,12 +14,14 @@ import {
 import { AuthGuard } from './auth.guard';
 import { AuthService } from './auth.service';
 import { PasswordService } from './password.service';
+import { AuthRateLimitModule } from './auth-rate-limit.module';
 
 @Module({
   imports: [
     PrismaModule,
     TablesModule,
     AuthorizationModule,
+    AuthRateLimitModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: jwtConfiguration,

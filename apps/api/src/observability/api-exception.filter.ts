@@ -8,6 +8,7 @@ import {
 import { Response } from 'express';
 import { RequestWithId } from './request-id.middleware';
 import { StructuredLoggerService } from './structured-logger.service';
+import { httpRoute, UNMATCHED_ROUTE } from './http-route';
 
 type ErrorMessage = string | string[];
 
@@ -27,11 +28,12 @@ export class ApiExceptionFilter implements ExceptionFilter {
     const request = httpContext.getRequest<RequestWithId>();
     const response = httpContext.getResponse<Response>();
     const statusCode = this.getStatusCode(exception);
+    const route = httpRoute(request);
 
     this.logger.error('request_failed', {
       requestId: request.requestId,
       method: request.method,
-      route: request.path,
+      route,
       statusCode,
       durationMs: Math.max(0, Date.now() - request.requestStartedAt),
     });
@@ -39,10 +41,13 @@ export class ApiExceptionFilter implements ExceptionFilter {
     response.status(statusCode).json({
       statusCode,
       code: this.getErrorCode(exception, statusCode),
-      message: this.getErrorMessage(exception, statusCode),
+      message:
+        statusCode === HttpStatus.NOT_FOUND && route === UNMATCHED_ROUTE
+          ? 'Recurso não encontrado'
+          : this.getErrorMessage(exception, statusCode),
       requestId: request.requestId,
       timestamp: new Date().toISOString(),
-      path: request.path,
+      path: route,
     });
   }
 
@@ -53,6 +58,8 @@ export class ApiExceptionFilter implements ExceptionFilter {
   }
 
   private getErrorCode(exception: unknown, statusCode: number): string {
+    if (statusCode >= 500)
+      return HttpStatus[statusCode] ?? 'INTERNAL_SERVER_ERROR';
     const payload = this.getExceptionPayload(exception);
 
     if (
@@ -70,7 +77,7 @@ export class ApiExceptionFilter implements ExceptionFilter {
     exception: unknown,
     statusCode: number,
   ): ErrorMessage {
-    if (!(exception instanceof HttpException)) {
+    if (statusCode >= 500 || !(exception instanceof HttpException)) {
       return 'Internal server error';
     }
 
@@ -81,6 +88,9 @@ export class ApiExceptionFilter implements ExceptionFilter {
     }
 
     const payload = this.toExceptionPayload(response);
+    if (statusCode === HttpStatus.BAD_REQUEST && payload?.code === undefined) {
+      return 'Dados de entrada inválidos';
+    }
     const message = payload?.message;
 
     if (typeof message === 'string') {
