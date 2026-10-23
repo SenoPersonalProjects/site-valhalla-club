@@ -1,3 +1,4 @@
+import { AuditService } from '../audit/audit.service';
 import { Prisma } from '../generated/prisma/client';
 import { ApprovalStatus, CampaignStatus } from '../generated/prisma/enums';
 import { CampaignsService } from '../campaigns/campaigns.service';
@@ -70,8 +71,12 @@ describe('Quota transaction boundaries', () => {
         oneShot: { count: outsideCount, create: outsideWrite },
       } as unknown as PrismaService;
       const rules = new TableRulesService(prisma);
-      const campaigns = new CampaignsService(prisma, actors, rules);
-      const oneShots = new OneShotsService(prisma, actors, rules);
+      const campaigns = new CampaignsService(prisma, actors, rules, {
+        record: jest.fn().mockResolvedValue(undefined),
+      } as unknown as AuditService);
+      const oneShots = new OneShotsService(prisma, actors, rules, {
+        record: jest.fn().mockResolvedValue(undefined),
+      } as unknown as AuditService);
       const publish = (id: string) =>
         kind === 'campaign'
           ? campaigns.publish(id, 'master-1')

@@ -1,3 +1,4 @@
+import { AuditModule } from '../audit/audit.module';
 import { AuthorizationModule } from '../authorization/authorization.module';
 import { AuthorizationGuard } from '../authorization/authorization.guard';
 import { Module } from '@nestjs/common';
@@ -18,6 +19,7 @@ import { AuthRateLimitModule } from './auth-rate-limit.module';
 
 @Module({
   imports: [
+    AuditModule,
     PrismaModule,
     TablesModule,
     AuthorizationModule,

@@ -1,3 +1,4 @@
+import { AuditService } from '../../audit/audit.service';
 import { AuthorizationService } from '../../authorization/authorization.service';
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
@@ -99,10 +100,13 @@ describe('AdminUsersService', () => {
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       userClubRole: {
-        upsert: jest.fn().mockResolvedValue({
-          role: 'MASTER',
-          grantedAt: new Date('2026-01-01Z'),
-        }),
+        createMany: jest.fn().mockResolvedValue({ count: 1 }),
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({
+            role: 'MASTER',
+            grantedAt: new Date('2026-01-01Z'),
+          }),
         deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
     };
@@ -116,11 +120,17 @@ describe('AdminUsersService', () => {
         count: jest.fn(fail),
         updateMany: jest.fn(fail),
       },
-      userClubRole: { upsert: jest.fn(fail), deleteMany: jest.fn(fail) },
+      userClubRole: {
+        createMany: jest.fn(fail),
+        findUnique: jest.fn(fail),
+        deleteMany: jest.fn(fail),
+      },
       $transaction: jest.fn((callback) => callback(transaction)),
     };
     const prisma = root as PrismaService;
-    service = new AdminUsersService(prisma, new AuthorizationService(prisma));
+    service = new AdminUsersService(prisma, new AuthorizationService(prisma), {
+      record: jest.fn().mockResolvedValue(undefined),
+    } as unknown as AuditService);
   });
 
   it.each([SystemRole.ADMIN, SystemRole.DEV])(
@@ -155,7 +165,7 @@ describe('AdminUsersService', () => {
       }
       expect(transaction.user.findMany).not.toHaveBeenCalled();
       expect(transaction.user.updateMany).not.toHaveBeenCalled();
-      expect(transaction.userClubRole.upsert).not.toHaveBeenCalled();
+      expect(transaction.userClubRole.createMany).not.toHaveBeenCalled();
     },
   );
   it.each(
@@ -279,7 +289,7 @@ describe('AdminUsersService', () => {
         where: { id: target.id, status: 'APPROVED', systemRole: old },
         data: { systemRole: role },
       });
-      expect(transaction.userClubRole.upsert).not.toHaveBeenCalled();
+      expect(transaction.userClubRole.createMany).not.toHaveBeenCalled();
       expect(root.$transaction).toHaveBeenCalledWith(expect.any(Function), {
         isolationLevel: 'Serializable',
       });
@@ -312,7 +322,7 @@ describe('AdminUsersService', () => {
       });
     expect(transaction.user.updateMany).not.toHaveBeenCalled();
     expect(transaction.user.count).not.toHaveBeenCalled();
-    expect(transaction.userClubRole.upsert).not.toHaveBeenCalled();
+    expect(transaction.userClubRole.createMany).not.toHaveBeenCalled();
   });
   it.each([
     AccountStatus.PENDING,
@@ -333,36 +343,38 @@ describe('AdminUsersService', () => {
       });
     expect(target.status).toBe(status);
     expect(transaction.user.updateMany).not.toHaveBeenCalled();
-    expect(transaction.userClubRole.upsert).not.toHaveBeenCalled();
+    expect(transaction.userClubRole.createMany).not.toHaveBeenCalled();
     expect(transaction.userClubRole.deleteMany).not.toHaveBeenCalled();
   });
   it.each([ClubRole.PLAYER, ClubRole.MASTER, ClubRole.ADMIN])(
     'grants %s with server-owned grant metadata and no SystemRole update',
     async (role) => {
       await service.grantClubRole(target.id, actor.id, role);
-      expect(transaction.userClubRole.upsert).toHaveBeenCalledWith({
-        where: { userId_role: { userId: target.id, role } },
-        create: {
+      expect(transaction.userClubRole.createMany).toHaveBeenCalledWith({
+        data: {
           userId: target.id,
           role,
           grantedById: actor.id,
           grantedAt: expect.any(Date),
         },
-        update: {},
+        skipDuplicates: true,
+      });
+      expect(transaction.userClubRole.findUnique).toHaveBeenCalledWith({
+        where: { userId_role: { userId: target.id, role } },
         select: { role: true, grantedAt: true },
       });
       expect(transaction.user.updateMany).not.toHaveBeenCalled();
-      expect(root.userClubRole.upsert).not.toHaveBeenCalled();
+      expect(root.userClubRole.createMany).not.toHaveBeenCalled();
     },
   );
   it('duplicate grant is a no-op preserving original grantor and timestamp', async () => {
     let stored: any;
-    transaction.userClubRole.upsert.mockImplementation(
-      async ({ create, update }) => {
-        stored = stored ? { ...stored, ...update } : { ...create };
-        return { role: stored.role, grantedAt: stored.grantedAt };
-      },
-    );
+    transaction.userClubRole.createMany.mockImplementation(async ({ data }) => {
+      if (stored) return { count: 0 };
+      stored = { id: 'cuid-original', ...data };
+      return { count: 1 };
+    });
+    transaction.userClubRole.findUnique.mockImplementation(async () => stored);
     const first = await service.grantClubRole(
       target.id,
       actor.id,
@@ -391,7 +403,9 @@ describe('AdminUsersService', () => {
     },
   );
   it('sanitizes a raced uniqueness error but never swallows unrelated Prisma failures', async () => {
-    transaction.userClubRole.upsert.mockRejectedValueOnce(prismaError('P2002'));
+    transaction.userClubRole.createMany.mockRejectedValueOnce(
+      prismaError('P2002'),
+    );
     await expect(
       service.grantClubRole(target.id, actor.id, ClubRole.MASTER),
     ).rejects.toMatchObject({
@@ -399,7 +413,7 @@ describe('AdminUsersService', () => {
       response: { code: 'USER_ROLE_CONFLICT' },
     });
     const unexpected = prismaError('P2028');
-    transaction.userClubRole.upsert.mockRejectedValueOnce(unexpected);
+    transaction.userClubRole.createMany.mockRejectedValueOnce(unexpected);
     await expect(
       service.grantClubRole(target.id, actor.id, ClubRole.MASTER),
     ).rejects.toBe(unexpected);
@@ -432,7 +446,7 @@ describe('Admin user transaction retries', () => {
                   : approved('target'),
               ),
             },
-            userClubRole: { upsert: conflict, deleteMany: conflict },
+            userClubRole: { createMany: conflict, deleteMany: conflict },
           };
           clients.push(tx);
           return callback(tx);
@@ -442,6 +456,9 @@ describe('Admin user transaction retries', () => {
       const service = new AdminUsersService(
         prisma,
         new AuthorizationService(prisma),
+        {
+          record: jest.fn().mockResolvedValue(undefined),
+        } as unknown as AuditService,
       );
       await expect(
         mode === 'grant'
@@ -508,6 +525,9 @@ describe('Admin user transaction retries', () => {
       const service = new AdminUsersService(
         prisma,
         new AuthorizationService(prisma),
+        {
+          record: jest.fn().mockResolvedValue(undefined),
+        } as unknown as AuditService,
       );
       const operation = service.changeSystemRole(
         'target',
@@ -600,6 +620,9 @@ describe('Admin user transaction retries', () => {
     const service = new AdminUsersService(
       prisma,
       new AuthorizationService(prisma),
+      {
+        record: jest.fn().mockResolvedValue(undefined),
+      } as unknown as AuditService,
     );
     const results = await Promise.allSettled([
       service.changeSystemRole('b', 'a', SystemRole.USER),
@@ -627,7 +650,7 @@ describe('Concurrent club-role decisions', () => {
       $transaction: async (callback, options) => {
         expect(options.isolationLevel).toBe('ReadCommitted');
         let local: any, release: (() => void) | undefined;
-        // Models the unique-key/row write coordination of upsert/delete, not
+        // Models the unique-key/row write coordination of insert/delete, not
         // snapshot-wide serialization or a production application mutex.
         const acquire = async () => {
           const previous = tail;
@@ -647,11 +670,13 @@ describe('Concurrent club-role decisions', () => {
             ),
           },
           userClubRole: {
-            upsert: jest.fn(async ({ create, update }) => {
+            createMany: jest.fn(async ({ data }) => {
               await acquire();
-              local = local ? { ...local, ...update } : { ...create };
-              return { role: local.role, grantedAt: local.grantedAt };
+              if (local) return { count: 0 };
+              local = { id: 'cuid-original', ...data };
+              return { count: 1 };
             }),
+            findUnique: jest.fn(async () => local),
             deleteMany: jest.fn(async () => {
               await acquire();
               const count = local ? 1 : 0;
@@ -672,7 +697,9 @@ describe('Concurrent club-role decisions', () => {
     };
     const prisma = root as unknown as PrismaService;
     return {
-      service: new AdminUsersService(prisma, new AuthorizationService(prisma)),
+      service: new AdminUsersService(prisma, new AuthorizationService(prisma), {
+        record: jest.fn().mockResolvedValue(undefined),
+      } as unknown as AuditService),
       clients,
       stored: () => stored,
     };
@@ -688,8 +715,8 @@ describe('Concurrent club-role decisions', () => {
     expect(repo.stored().grantedById).toBe('operator-a');
     expect(repo.clients).toHaveLength(2);
     expect(repo.clients[1].user.findUnique).toHaveBeenCalledTimes(2);
-    expect(repo.clients[1].userClubRole.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({ update: {} }),
+    expect(repo.clients[1].userClubRole.createMany).toHaveBeenCalledWith(
+      expect.objectContaining({ skipDuplicates: true }),
     );
   });
   it('concurrent grant/remove coordinates only the affected unique link without retrying the transaction', async () => {

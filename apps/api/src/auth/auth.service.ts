@@ -5,6 +5,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { AuditService } from '../audit/audit.service';
+import { AUDIT_ACTION, AUDIT_ENTITY } from '../audit/audit.constants';
 import { Prisma } from '../generated/prisma/client';
 import { AccountStatus, SystemRole } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
@@ -37,6 +39,7 @@ export class AuthService {
     private readonly passwords: PasswordService,
     private readonly jwt: JwtService,
     private readonly actors: TableActorsService,
+    private readonly audit: AuditService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -116,7 +119,12 @@ export class AuthService {
     if (!result.count) throw unauthorized('AUTH_ACCOUNT_UNAVAILABLE');
   }
 
-  async review(id: string, reviewerId: string, dto: RegistrationReviewDto) {
+  async review(
+    id: string,
+    reviewerId: string,
+    dto: RegistrationReviewDto,
+    requestId?: string,
+  ) {
     const note = dto.note?.trim() || null;
     if (dto.decision === 'REJECTED' && !note)
       invalidRegistration(
@@ -134,7 +142,20 @@ export class AuthService {
           code: 'USER_NOT_FOUND',
           message: 'Usuário não encontrado',
         });
-      if (user.status === dto.decision) return user;
+      const fromStatus = user.status;
+      const record = (changed: boolean) =>
+        this.audit.record(transaction, {
+          actorId: reviewerId,
+          action: AUDIT_ACTION.USER_REGISTRATION_REVIEWED,
+          entityType: AUDIT_ENTITY.USER,
+          entityId: id,
+          requestId,
+          metadata: { changed, fromStatus, toStatus: dto.decision },
+        });
+      if (user.status === dto.decision) {
+        await record(false);
+        return user;
+      }
       if (user.status !== AccountStatus.PENDING)
         throw new ConflictException({
           code: 'REGISTRATION_REVIEW_NOT_PENDING',
@@ -154,6 +175,7 @@ export class AuthService {
           code: 'REGISTRATION_REVIEW_CONFLICT',
           message: 'O cadastro já foi revisado; consulte o estado atual',
         });
+      await record(true);
       return { id, status: dto.decision };
     });
   }

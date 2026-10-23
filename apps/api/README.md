@@ -105,8 +105,12 @@ são fundação do domínio. Detalhes canônicos:
 [métricas, capacidade e logs seguros](../../docs/observability/metricas-capacidade-fase2.md)
 e [dados pessoais e acesso](../../docs/privacy/lgpd-fase2.md).
 
-Modelos de conta, perfil, participação, feedback, disciplina e audit log existem
-no schema; seus fluxos completos não estão implementados por esta documentação.
+O [audit log administrativo](../../docs/api/audit-log.md) persiste as sete ações
+administrativas explícitas na mesma transação, inclusive no-ops, e oferece
+consulta paginada read-only em `GET /admin/audit-logs` para ADMIN/DEV aprovados.
+Não substitui observabilidade nem registra leituras, auth ou ações do titular.
+Participação, feedback e disciplina têm modelos no schema; seus fluxos completos
+não estão implementados por esta documentação.
 
 ## Scripts
 

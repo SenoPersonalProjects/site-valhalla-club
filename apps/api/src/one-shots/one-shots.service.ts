@@ -1,4 +1,6 @@
 import { Injectable } from '@nestjs/common';
+import { AuditService } from '../audit/audit.service';
+import { AUDIT_ACTION, AUDIT_ENTITY } from '../audit/audit.constants';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import {
   ApprovalStatus,
@@ -56,6 +58,7 @@ export class OneShotsService {
     private readonly prisma: PrismaService,
     private readonly actors: TableActorsService,
     private readonly rules: TableRulesService,
+    private readonly audit: AuditService,
   ) {}
 
   async create(actorId: string, dto: CreateOneShotDto) {
@@ -228,7 +231,12 @@ export class OneShotsService {
     });
   }
 
-  async correct(id: string, actorId: string, dto: CorrectOneShotDto) {
+  async correct(
+    id: string,
+    actorId: string,
+    dto: CorrectOneShotDto,
+    requestId?: string,
+  ) {
     return this.rules.serializable(async (transaction) => {
       await this.actors.assertAdministrator(actorId, transaction);
       if (dto.gameSystemId === undefined && dto.scheduledAt === undefined) {
@@ -264,11 +272,30 @@ export class OneShotsService {
         scheduledAt,
         id,
       );
+      const fields: (
+        | 'gameSystemId'
+        | 'scheduledAt'
+        | 'approvalStatus'
+        | 'status'
+        | 'review'
+      )[] = [];
+      if (gameSystemId !== oneShot.gameSystemId) fields.push('gameSystemId');
+      if (scheduledAt.getTime() !== oneShot.session.scheduledAt.getTime())
+        fields.push('scheduledAt');
+      if (oneShot.approvalStatus !== ApprovalStatus.PENDING)
+        fields.push('approvalStatus');
+      if (oneShot.status === OneShotStatus.SCHEDULED) fields.push('status');
+      if (
+        oneShot.reviewedById != null ||
+        oneShot.reviewedAt != null ||
+        oneShot.reviewNote != null
+      )
+        fields.push('review');
       await transaction.session.update({
         where: { id: oneShot.session.id },
         data: { scheduledAt },
       });
-      return transaction.oneShot.update({
+      const result = await transaction.oneShot.update({
         where: { id },
         data: {
           gameSystemId,
@@ -282,6 +309,15 @@ export class OneShotsService {
         },
         include: oneShotPrivateDetails,
       });
+      await this.audit.record(transaction, {
+        actorId,
+        action: AUDIT_ACTION.ONE_SHOT_CORRECTED,
+        entityType: AUDIT_ENTITY.ONE_SHOT,
+        entityId: id,
+        requestId,
+        metadata: { changed: fields.length > 0, fields },
+      });
+      return result;
     });
   }
 
@@ -395,10 +431,16 @@ export class OneShotsService {
     });
   }
 
-  async review(id: string, reviewerId: string, dto: ReviewOneShotDto) {
+  async review(
+    id: string,
+    reviewerId: string,
+    dto: ReviewOneShotDto,
+    requestId?: string,
+  ) {
     return this.rules.serializable(async (transaction) => {
       await this.actors.assertAdministrator(reviewerId, transaction);
       const oneShot = await this.getByIdOrThrow(id, transaction);
+      const fromApprovalStatus = oneShot.approvalStatus;
       const note = this.normalizeOptionalText(dto.note);
 
       if (
@@ -428,7 +470,13 @@ export class OneShotsService {
         );
       }
 
-      return transaction.oneShot.update({
+      const changed =
+        fromApprovalStatus !== dto.decision ||
+        oneShot.reviewedById !== reviewerId ||
+        (oneShot.reviewNote ?? null) !== note ||
+        (dto.decision === ApprovalStatus.REJECTED &&
+          oneShot.status === OneShotStatus.SCHEDULED);
+      const result = await transaction.oneShot.update({
         where: { id },
         data: {
           approvalStatus: dto.decision,
@@ -442,6 +490,19 @@ export class OneShotsService {
         },
         include: oneShotPrivateDetails,
       });
+      await this.audit.record(transaction, {
+        actorId: reviewerId,
+        action: AUDIT_ACTION.ONE_SHOT_APPROVAL_REVIEWED,
+        entityType: AUDIT_ENTITY.ONE_SHOT,
+        entityId: id,
+        requestId,
+        metadata: {
+          changed,
+          fromApprovalStatus,
+          toApprovalStatus: dto.decision,
+        },
+      });
+      return result;
     });
   }
 

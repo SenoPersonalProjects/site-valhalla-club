@@ -1,3 +1,4 @@
+import { AuditService } from '../audit/audit.service';
 import { Prisma } from '../generated/prisma/client';
 import {
   ApprovalStatus,
@@ -102,7 +103,9 @@ describe('Operational state transaction boundaries', () => {
         clientVersion: '7.10.0',
       });
     });
-    const service = new OneShotsService(h.prisma, h.actors, h.rules);
+    const service = new OneShotsService(h.prisma, h.actors, h.rules, {
+      record: jest.fn().mockResolvedValue(undefined),
+    } as unknown as AuditService);
     await expect(
       service.create('master-1', {
         gameSystemId: 'system-1',
@@ -126,7 +129,9 @@ describe('Operational state transaction boundaries', () => {
     'reads and validates one-shot state inside the writing transaction for %s',
     async (operation) => {
       const h = harness();
-      const service = new OneShotsService(h.prisma, h.actors, h.rules);
+      const service = new OneShotsService(h.prisma, h.actors, h.rules, {
+        record: jest.fn().mockResolvedValue(undefined),
+      } as unknown as AuditService);
       if (operation === 'remove')
         h.tx.oneShot.findUnique.mockResolvedValue({
           ...oneShot,
@@ -174,7 +179,9 @@ describe('Operational state transaction boundaries', () => {
     'reads campaign state inside the writing transaction for %s',
     async (operation) => {
       const h = harness();
-      const service = new CampaignsService(h.prisma, h.actors, h.rules);
+      const service = new CampaignsService(h.prisma, h.actors, h.rules, {
+        record: jest.fn().mockResolvedValue(undefined),
+      } as unknown as AuditService);
       if (operation === 'remove')
         h.tx.campaign.findUnique.mockResolvedValue({
           ...campaign,
@@ -218,8 +225,12 @@ describe('Operational state transaction boundaries', () => {
           clientVersion: '7.10.0',
         });
       });
-      const campaigns = new CampaignsService(h.prisma, h.actors, h.rules);
-      const oneShots = new OneShotsService(h.prisma, h.actors, h.rules);
+      const campaigns = new CampaignsService(h.prisma, h.actors, h.rules, {
+        record: jest.fn().mockResolvedValue(undefined),
+      } as unknown as AuditService);
+      const oneShots = new OneShotsService(h.prisma, h.actors, h.rules, {
+        record: jest.fn().mockResolvedValue(undefined),
+      } as unknown as AuditService);
       const result =
         operation === 'campaign-review'
           ? campaigns.review('campaign-1', 'admin-1', {
@@ -256,6 +267,9 @@ describe('Operational state transaction boundaries', () => {
       h.prisma,
       new TableActorsService(h.prisma, new AuthorizationService(h.prisma)),
       h.rules,
+      {
+        record: jest.fn().mockResolvedValue(undefined),
+      } as unknown as AuditService,
     );
     await service.correct('one-shot-1', 'admin-1', {
       scheduledAt: new Date(Date.now() + 86_400_000).toISOString(),
@@ -274,7 +288,9 @@ describe('Operational state transaction boundaries', () => {
 
   it('re-reads a concurrent approval/publication and does not refresh ACTIVE on retry', async () => {
     const h = harness();
-    const service = new CampaignsService(h.prisma, h.actors, h.rules);
+    const service = new CampaignsService(h.prisma, h.actors, h.rules, {
+      record: jest.fn().mockResolvedValue(undefined),
+    } as unknown as AuditService);
     h.tx.campaign.findUnique.mockResolvedValueOnce({
       ...campaign,
       status: CampaignStatus.INACTIVE,
@@ -299,7 +315,9 @@ describe('Operational state transaction boundaries', () => {
 
   it('does not complete a session using a date read before concurrent correction', async () => {
     const h = harness();
-    const service = new OneShotsService(h.prisma, h.actors, h.rules);
+    const service = new OneShotsService(h.prisma, h.actors, h.rules, {
+      record: jest.fn().mockResolvedValue(undefined),
+    } as unknown as AuditService);
     h.transaction.mockImplementationOnce(async (operation) => {
       await operation(h.tx as unknown as Prisma.TransactionClient);
       h.tx.oneShot.findUnique.mockResolvedValue({

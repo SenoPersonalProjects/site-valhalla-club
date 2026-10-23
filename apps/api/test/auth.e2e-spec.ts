@@ -37,6 +37,7 @@ describe('Authentication with real Bearer JWT (e2e)', () => {
   let app: INestApplication;
   let jwt: JwtService;
   let users: Map<string, any>;
+  let auditLogs: any[];
   let hash: string;
   const password = 'test-only long password';
   const secret = 'test-only-auth-secret-at-least-32-bytes';
@@ -86,6 +87,40 @@ describe('Authentication with real Bearer JWT (e2e)', () => {
     prisma = {
       onModuleInit: jest.fn(),
       onModuleDestroy: jest.fn(),
+      auditLog: {
+        create: jest.fn(async ({ data }) => {
+          const entry = {
+            id: `audit-${auditLogs.length.toString().padStart(4, '0')}`,
+            ...data,
+            createdAt: new Date(),
+          };
+          auditLogs.push(entry);
+          return entry;
+        }),
+        findMany: jest.fn(async ({ where, skip, take, select }) =>
+          auditLogs
+            .filter((entry) =>
+              Object.entries(where).every(
+                ([key, value]) => entry[key] === value,
+              ),
+            )
+            .sort(
+              (a, b) =>
+                b.createdAt.getTime() - a.createdAt.getTime() ||
+                b.id.localeCompare(a.id),
+            )
+            .slice(skip, skip + take)
+            .map((entry) => project(entry, select)),
+        ),
+        count: jest.fn(
+          async ({ where }) =>
+            auditLogs.filter((entry) =>
+              Object.entries(where).every(
+                ([key, value]) => entry[key] === value,
+              ),
+            ).length,
+        ),
+      },
       user: {
         findMany: jest.fn(async ({ where, skip = 0, take, select }) =>
           [...users.values()]
@@ -202,18 +237,25 @@ describe('Authentication with real Bearer JWT (e2e)', () => {
       },
       sessionParticipant: { findMany: jest.fn().mockResolvedValue([]) },
       userClubRole: {
-        upsert: jest.fn(async ({ where, create, update, select }) => {
-          const user = users.get(where.userId_role.userId);
-          let link = user.clubRoles.find(
-            (item) => item.role === where.userId_role.role,
-          );
-          if (link) Object.assign(link, update);
-          else {
-            link = { ...create };
-            user.clubRoles.push(link);
-          }
-          return project(link, select);
+        createMany: jest.fn(async ({ data }) => {
+          const user = users.get(data.userId);
+          if (user.clubRoles.some((item) => item.role === data.role))
+            return { count: 0 };
+          user.clubRoles.push({
+            id: 'cuid-role-' + user.clubRoles.length,
+            ...data,
+          });
+          return { count: 1 };
         }),
+        findUnique: jest.fn(async ({ where, select }) =>
+          project(
+            users
+              .get(where.userId_role.userId)
+              .clubRoles.find((item) => item.role === where.userId_role.role) ??
+              null,
+            select,
+          ),
+        ),
         deleteMany: jest.fn(async ({ where }) => {
           const user = users.get(where.userId);
           const before = user.clubRoles.length;
@@ -247,10 +289,19 @@ describe('Authentication with real Bearer JWT (e2e)', () => {
           return project(user.profile, select);
         }),
       },
-      $transaction: async (operation: any) =>
-        typeof operation === 'function'
-          ? operation(prisma)
-          : Promise.all(operation),
+      $transaction: async (operation: any) => {
+        const beforeUsers = structuredClone(users);
+        const beforeLogs = structuredClone(auditLogs);
+        try {
+          return await (typeof operation === 'function'
+            ? operation(prisma)
+            : Promise.all(operation));
+        } catch (error) {
+          users = beforeUsers;
+          auditLogs = beforeLogs;
+          throw error;
+        }
+      },
     };
     const module = await Test.createTestingModule({
       imports: [AppModule],
@@ -273,6 +324,7 @@ describe('Authentication with real Bearer JWT (e2e)', () => {
   beforeEach(() => {
     app.get<ThrottlerStorageService>(ThrottlerStorage).onApplicationShutdown();
     users = new Map();
+    auditLogs = [];
     seed('admin', { systemRole: 'ADMIN' });
     seed('master', { clubRoles: [{ id: 'role', role: 'MASTER' }] });
     jest.clearAllMocks();
@@ -1027,7 +1079,7 @@ describe('Authentication with real Bearer JWT (e2e)', () => {
               : 'AUTH_TOKEN_REQUIRED',
         );
       }
-      expect(prisma.userClubRole.upsert).not.toHaveBeenCalled();
+      expect(prisma.userClubRole.createMany).not.toHaveBeenCalled();
       expect(prisma.userClubRole.deleteMany).not.toHaveBeenCalled();
       expect(prisma.user.updateMany).not.toHaveBeenCalled();
     },
@@ -1316,7 +1368,7 @@ describe('Authentication with real Bearer JWT (e2e)', () => {
     expect(users.get('master').status).toBe(status);
     expect(users.get('master')).toEqual(before);
     expect(prisma.user.updateMany).not.toHaveBeenCalled();
-    expect(prisma.userClubRole.upsert).not.toHaveBeenCalled();
+    expect(prisma.userClubRole.createMany).not.toHaveBeenCalled();
     expect(prisma.userClubRole.deleteMany).not.toHaveBeenCalled();
   });
   it.each([
@@ -1353,7 +1405,7 @@ describe('Authentication with real Bearer JWT (e2e)', () => {
         .send(body)
         .expect(400);
       expect(prisma.user.updateMany).not.toHaveBeenCalled();
-      expect(prisma.userClubRole.upsert).not.toHaveBeenCalled();
+      expect(prisma.userClubRole.createMany).not.toHaveBeenCalled();
       expect(prisma.userClubRole.deleteMany).not.toHaveBeenCalled();
     },
   );
@@ -2047,5 +2099,547 @@ describe('Authentication with real Bearer JWT (e2e)', () => {
       .expect(500);
     expect(JSON.stringify(response.body)).not.toContain('do-not-leak');
     expect(JSON.stringify(logs.error.mock.calls)).not.toContain('do-not-leak');
+  });
+
+  afterEach(() => {
+    // Inspect persisted content of every audit scenario, not just TS shapes.
+    const serialized = JSON.stringify(auditLogs);
+    const forbiddenKeys = [
+      'email',
+      'whatsapp',
+      'whatsappNumber',
+      'birthDate',
+      'displayName',
+      'reviewNote',
+      'suspensionReason',
+      'password',
+      'passwordHash',
+      'accessToken',
+      'Authorization',
+      'authorization',
+      'cookie',
+      'ip',
+      'IP',
+      'description',
+      'stack',
+      'SQL',
+      'sql',
+      'constraint',
+    ];
+    const inspect = (value: any) => {
+      if (value === null || typeof value !== 'object') return;
+      for (const [key, nested] of Object.entries(value)) {
+        expect(forbiddenKeys).not.toContain(key);
+        inspect(nested);
+      }
+    };
+    inspect(auditLogs);
+    for (const sensitive of [
+      'pii-target@example.com',
+      'private-display',
+      '+447700900123',
+      '1995-01-01',
+      'private-review-note',
+      'NOTA_A_SUPER_SECRETA',
+      'NOTA_B_SUPER_SECRETA',
+      '203.0.113.77',
+      'PRIVATE_FREE_DESCRIPTION',
+      'PRIVATE_SUSPENSION_REASON',
+      'PRIVATE_STACK',
+      'PRIVATE_SQL',
+      'PRIVATE_CONSTRAINT',
+      password,
+      hash,
+    ])
+      expect(serialized).not.toContain(sensitive);
+    expect(serialized).not.toMatch(
+      /eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/,
+    );
+  });
+
+  describe('Administrative persistent audit', () => {
+    it.each(['APPROVED', 'REJECTED'] as const)(
+      'keeps original registration review metadata when administrator B repeats %s with another note',
+      async (decision) => {
+        seed('reviewer-b', { systemRole: 'ADMIN' });
+        seed('audit-target', { status: 'PENDING' });
+        const review = (actor: string, note?: string) =>
+          request(app.getHttpServer())
+            .patch('/admin/users/audit-target/registration-review')
+            .set('Authorization', 'Bearer ' + token(actor))
+            .send({ decision, ...(note === undefined ? {} : { note }) });
+        await review('admin', 'NOTA_A_SUPER_SECRETA').expect(200);
+        const original = structuredClone({
+          reviewedById: users.get('audit-target').reviewedById,
+          reviewedAt: users.get('audit-target').reviewedAt,
+          reviewNote: users.get('audit-target').reviewNote,
+        });
+        const repeated = await review(
+          'reviewer-b',
+          'NOTA_B_SUPER_SECRETA',
+        ).expect(200);
+        expect(repeated.body).toEqual({ id: 'audit-target', status: decision });
+        expect(users.get('audit-target')).toMatchObject(original);
+        expect(original.reviewedById).toBe('admin');
+        expect(original.reviewNote).toBe('NOTA_A_SUPER_SECRETA');
+        expect(prisma.user.updateMany).toHaveBeenCalledTimes(1);
+        expect(auditLogs).toHaveLength(2);
+        expect(auditLogs[1]).toMatchObject({
+          actorId: 'reviewer-b',
+          metadata: {
+            changed: false,
+            fromStatus: decision,
+            toStatus: decision,
+          },
+        });
+        expect(JSON.stringify(auditLogs)).not.toContain('NOTA_A_SUPER_SECRETA');
+        expect(JSON.stringify(auditLogs)).not.toContain('NOTA_B_SUPER_SECRETA');
+        if (decision === 'APPROVED') {
+          await review('reviewer-b').expect(200);
+          expect(auditLogs).toHaveLength(3);
+          expect(auditLogs[2].metadata.changed).toBe(false);
+        } else {
+          const missing = await review('reviewer-b').expect(400);
+          expect(missing.body.code).toBe(
+            'REGISTRATION_REJECTION_NOTE_REQUIRED',
+          );
+          expect(auditLogs).toHaveLength(2);
+        }
+        expect(users.get('audit-target')).toMatchObject(original);
+        expect(prisma.user.updateMany).toHaveBeenCalledTimes(1);
+      },
+    );
+    it('rolls back an aborted Serializable attempt and commits one audit on retry', async () => {
+      const original = prisma.$transaction;
+      let attempts = 0;
+      prisma.$transaction = (operation: any, options: any) =>
+        original(async (tx: any) => {
+          attempts++;
+          const result = await operation(tx);
+          if (attempts === 1)
+            throw new Prisma.PrismaClientKnownRequestError('private conflict', {
+              code: 'P2034',
+              clientVersion: '7',
+            });
+          return result;
+        }, options);
+      try {
+        await request(app.getHttpServer())
+          .patch('/admin/users/master/system-role')
+          .set('Authorization', 'Bearer ' + token('admin'))
+          .set('x-request-id', 'retry-audit')
+          .send({ systemRole: 'ADMIN' })
+          .expect(200);
+        expect(attempts).toBe(2);
+        expect(users.get('master').systemRole).toBe('ADMIN');
+        expect(auditLogs).toHaveLength(1);
+        expect(auditLogs[0]).toMatchObject({
+          requestId: 'retry-audit',
+          metadata: {
+            changed: true,
+            fromSystemRole: 'USER',
+            toSystemRole: 'ADMIN',
+          },
+        });
+      } finally {
+        prisma.$transaction = original;
+      }
+    });
+
+    it('keeps auth, own account and public routes outside administrative audit', async () => {
+      const bearer = 'Bearer ' + token('master');
+      await request(app.getHttpServer())
+        .get('/auth/me')
+        .set('Authorization', bearer)
+        .expect(200);
+      await request(app.getHttpServer())
+        .patch('/account/profile')
+        .set('Authorization', bearer)
+        .send({ displayName: 'Own profile only' })
+        .expect(200);
+      for (const path of [
+        '/',
+        '/health',
+        '/campaigns/public',
+        '/one-shots/public',
+      ])
+        await request(app.getHttpServer()).get(path).expect(200);
+      await request(app.getHttpServer())
+        .post('/auth/logout')
+        .set('Authorization', bearer)
+        .expect(204);
+      expect(auditLogs).toEqual([]);
+    });
+
+    it('rejects invalid and revoked Bearer tokens before audit authorization', async () => {
+      await request(app.getHttpServer())
+        .get('/admin/audit-logs')
+        .set('Authorization', 'Bearer invalid')
+        .expect(401);
+      const bearer = 'Bearer ' + token('admin');
+      users.get('admin').authVersion++;
+      const response = await request(app.getHttpServer())
+        .get('/admin/audit-logs')
+        .set('Authorization', bearer)
+        .expect(401);
+      expect(response.body.code).toBe('AUTH_TOKEN_REVOKED');
+      expect(auditLogs).toEqual([]);
+    });
+    const auditGet = (query: Record<string, unknown> = {}, actor = 'admin') =>
+      request(app.getHttpServer())
+        .get('/admin/audit-logs')
+        .query(query)
+        .set('Authorization', 'Bearer ' + token(actor));
+    const grant = (requestId = 'audit-smoke-123') =>
+      request(app.getHttpServer())
+        .post('/admin/users/master/club-roles')
+        .set('Authorization', 'Bearer ' + token('admin'))
+        .set('x-request-id', requestId)
+        .send({ role: 'PLAYER' });
+
+    it.each(['absent', 'x-user-id'])(
+      'requires Bearer before roles: %s',
+      async (mode) => {
+        const call = request(app.getHttpServer()).get('/admin/audit-logs');
+        if (mode === 'x-user-id') call.set('x-user-id', 'admin');
+        const response = await call.expect(401);
+        expect(response.body.code).toBe('AUTH_TOKEN_REQUIRED');
+        expect(auditLogs).toEqual([]);
+      },
+    );
+    it.each([{}, { clubRoles: [{ role: 'ADMIN' }] }])(
+      'denies USER even with club admin %j',
+      async (overrides) => {
+        seed('reader', overrides);
+        const response = await auditGet({}, 'reader').expect(403);
+        expect(response.body.code).toBe('ADMIN_ROLE_REQUIRED');
+      },
+    );
+    it.each(['ADMIN', 'DEV'])(
+      'permits approved %s and does not audit reads',
+      async (systemRole) => {
+        seed('reader', { systemRole });
+        const response = await auditGet({}, 'reader').expect(200);
+        expect(response.body).toEqual({
+          items: [],
+          meta: { page: 1, limit: 20, total: 0, pages: 0 },
+        });
+        expect(auditLogs).toEqual([]);
+      },
+    );
+    it.each([
+      'PENDING',
+      'REJECTED',
+      'SUSPENDED',
+      'DELETION_PENDING',
+      'ANONYMIZED',
+    ])('denies unavailable operator %s', async (status) => {
+      seed('reader', { systemRole: 'ADMIN', status });
+      await auditGet({}, 'reader').expect(401);
+    });
+    it('uses middleware-normalized requestId for both response and persistence', async () => {
+      const valid = await grant().expect(200);
+      expect(valid.headers['x-request-id']).toBe('audit-smoke-123');
+      expect(auditLogs[0].requestId).toBe('audit-smoke-123');
+      expect(auditLogs[0].metadata).toEqual({ changed: true, role: 'PLAYER' });
+      const invalid = await grant('invalid request id!').expect(200);
+      expect(invalid.headers['x-request-id']).toMatch(/^[0-9a-f-]{36}$/);
+      expect(auditLogs[1].requestId).toBe(invalid.headers['x-request-id']);
+      expect(JSON.stringify(auditLogs)).not.toContain('invalid request id!');
+      expect(auditLogs[1].metadata).toEqual({ changed: false, role: 'PLAYER' });
+      expect(auditLogs).toHaveLength(2);
+    });
+    it('paginates and filters exact values in deterministic order without actor joins', async () => {
+      await grant().expect(200);
+      await grant('another-request').expect(200);
+      const response = await auditGet({
+        page: 1,
+        limit: 1,
+        actorId: 'admin',
+        entityType: 'USER',
+        entityId: 'master',
+      }).expect(200);
+      expect(response.body.meta).toEqual({
+        page: 1,
+        limit: 1,
+        total: 2,
+        pages: 2,
+      });
+      const expected = [...auditLogs].sort(
+        (a, b) =>
+          b.createdAt.getTime() - a.createdAt.getTime() ||
+          b.id.localeCompare(a.id),
+      );
+      expect(response.body.items[0].id).toBe(expected[0].id);
+      expect(Object.keys(response.body.items[0]).sort()).toEqual(
+        [
+          'id',
+          'actorId',
+          'action',
+          'entityType',
+          'entityId',
+          'requestId',
+          'metadata',
+          'createdAt',
+        ].sort(),
+      );
+      expect(prisma.auditLog.findMany).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          select: expect.not.objectContaining({ actor: expect.anything() }),
+        }),
+      );
+      expect(
+        (await auditGet({ requestId: 'audit-smoke-123' }).expect(200)).body.meta
+          .total,
+      ).toBe(1);
+      expect(
+        (await auditGet({ actorId: 'another-actor' }).expect(200)).body.meta
+          .total,
+      ).toBe(0);
+      expect(auditLogs).toHaveLength(2);
+    });
+    it.each([
+      { entityId: 'master' },
+      { entityType: 'SECRET' },
+      { limit: 51 },
+      { page: 0 },
+      { page: Number.MAX_SAFE_INTEGER },
+      { email: 'private@example.com' },
+      { metadata: 'anything' },
+      { requestId: 'invalid request id!' },
+      { requestId: 'a'.repeat(129) },
+      { actorId: 'a'.repeat(129) },
+      { entityType: 'USER', entityId: 'a'.repeat(129) },
+      { foo: 'bar' },
+    ])('rejects invalid or unsupported audit filter %j', async (query) => {
+      await auditGet(query).expect(400);
+      expect(auditLogs).toEqual([]);
+      expect(prisma.auditLog.findMany).not.toHaveBeenCalled();
+    });
+    it('audits all seven administrative contracts, successful no-ops and safe metadata', async () => {
+      seed('target', {
+        status: 'PENDING',
+        email: 'pii-target@example.com',
+        suspensionReason: 'PRIVATE_SUSPENSION_REASON',
+        profile: {
+          displayName: 'private-display',
+          whatsappNumber: '+447700900123',
+          birthDate: new Date('1995-01-01Z'),
+        },
+      });
+      const header = 'Bearer ' + token('admin');
+      const review = () =>
+        request(app.getHttpServer())
+          .patch('/admin/users/target/registration-review')
+          .set('Authorization', header)
+          .set('CF-Connecting-IP', '203.0.113.77')
+          .set('Cookie', 'private-cookie-value')
+          .send({ decision: 'APPROVED', note: 'private-review-note' });
+      await review().expect(200);
+      await review().expect(200);
+      const change = () =>
+        request(app.getHttpServer())
+          .patch('/admin/users/target/system-role')
+          .set('Authorization', header)
+          .send({ systemRole: 'ADMIN' });
+      await change().expect(200);
+      await change().expect(200);
+      await grant().expect(200);
+      await grant().expect(200);
+      const remove = () =>
+        request(app.getHttpServer())
+          .delete('/admin/users/master/club-roles/PLAYER')
+          .set('Authorization', header);
+      await remove().expect(204);
+      await remove().expect(204);
+      prisma.campaign.findUnique.mockResolvedValueOnce({
+        id: 'campaign',
+        masterId: 'master',
+        status: 'DRAFT',
+        approvalStatus: 'PENDING',
+        description: 'PRIVATE_FREE_DESCRIPTION',
+      });
+      await request(app.getHttpServer())
+        .patch('/admin/campaigns/campaign/approval')
+        .set('Authorization', header)
+        .send({ decision: 'APPROVED', note: 'private-review-note' })
+        .expect(200);
+      prisma.campaign.findUnique.mockResolvedValueOnce({
+        id: 'campaign',
+        masterId: 'master',
+        status: 'ACTIVE',
+        approvalStatus: 'APPROVED',
+      });
+      await request(app.getHttpServer())
+        .patch('/admin/campaigns/campaign/approval')
+        .set('Authorization', header)
+        .send({ decision: 'APPROVED' })
+        .expect(200);
+      const privateOneShot = {
+        id: 'one-shot',
+        masterId: 'master',
+        gameSystemId: 'system',
+        status: 'DRAFT',
+        approvalStatus: 'PENDING',
+        description: 'PRIVATE_FREE_DESCRIPTION',
+        session: {
+          id: 'one-shot-session',
+          scheduledAt: new Date(Date.now() + 86_400_000),
+        },
+      };
+      prisma.oneShot.findUnique.mockResolvedValueOnce(privateOneShot);
+      await request(app.getHttpServer())
+        .patch('/admin/one-shots/one-shot/approval')
+        .set('Authorization', header)
+        .send({ decision: 'APPROVED', note: 'private-review-note' })
+        .expect(200);
+      prisma.oneShot.findUnique.mockResolvedValueOnce(privateOneShot);
+      await request(app.getHttpServer())
+        .patch('/admin/one-shots/one-shot/correction')
+        .set('Authorization', header)
+        .send({
+          scheduledAt: new Date(Date.now() + 2 * 86400000).toISOString(),
+        })
+        .expect(200);
+      expect(auditLogs).toHaveLength(12);
+      expect(auditLogs.map((entry) => entry.metadata.changed)).toEqual([
+        true,
+        false,
+        true,
+        false,
+        true,
+        false,
+        true,
+        false,
+        true,
+        false,
+        true,
+        true,
+      ]);
+      expect(new Set(auditLogs.map((entry) => entry.action)).size).toBe(7);
+      expect(
+        auditLogs.map((entry) => [
+          entry.action,
+          entry.entityType,
+          entry.entityId,
+        ]),
+      ).toEqual([
+        ['USER_REGISTRATION_REVIEWED', 'USER', 'target'],
+        ['USER_REGISTRATION_REVIEWED', 'USER', 'target'],
+        ['USER_SYSTEM_ROLE_CHANGED', 'USER', 'target'],
+        ['USER_SYSTEM_ROLE_CHANGED', 'USER', 'target'],
+        ['USER_CLUB_ROLE_GRANTED', 'USER', 'master'],
+        ['USER_CLUB_ROLE_GRANTED', 'USER', 'master'],
+        ['USER_CLUB_ROLE_REMOVED', 'USER', 'master'],
+        ['USER_CLUB_ROLE_REMOVED', 'USER', 'master'],
+        ['CAMPAIGN_APPROVAL_REVIEWED', 'CAMPAIGN', 'campaign'],
+        ['CAMPAIGN_APPROVAL_REVIEWED', 'CAMPAIGN', 'campaign'],
+        ['ONE_SHOT_APPROVAL_REVIEWED', 'ONE_SHOT', 'one-shot'],
+        ['ONE_SHOT_CORRECTED', 'ONE_SHOT', 'one-shot'],
+      ]);
+      const response = await auditGet().expect(200);
+      for (const content of [
+        JSON.stringify(auditLogs),
+        JSON.stringify(response.body),
+      ])
+        for (const sensitive of [
+          'pii-target@example.com',
+          'private-display',
+          '+447700900123',
+          '1995-01-01',
+          'private-review-note',
+          password,
+          hash,
+          header,
+          header.slice('Bearer '.length),
+          'private-cookie-value',
+          'passwordHash',
+          'authVersion',
+          'reviewNote',
+          'whatsappNumber',
+          'birthDate',
+          'displayName',
+          'suspensionReason',
+          'description',
+          'Authorization',
+          'cookie',
+        ])
+          expect(content).not.toContain(sensitive);
+      expect(
+        auditLogs.every(
+          (entry) =>
+            entry.actorId === 'admin' && typeof entry.requestId === 'string',
+        ),
+      ).toBe(true);
+    });
+    it('does not audit rejected mutations or allow clients to forge audit properties', async () => {
+      const header = 'Bearer ' + token('admin');
+      for (const field of [
+        'actorId',
+        'action',
+        'entityType',
+        'entityId',
+        'requestId',
+        'metadata',
+        'createdAt',
+      ])
+        await request(app.getHttpServer())
+          .patch('/admin/users/master/system-role')
+          .set('Authorization', header)
+          .send({ systemRole: 'ADMIN', [field]: 'forged' })
+          .expect(400);
+      await request(app.getHttpServer())
+        .patch('/admin/users/admin/system-role')
+        .set('Authorization', header)
+        .send({ systemRole: 'USER' })
+        .expect(409);
+      await request(app.getHttpServer())
+        .patch('/admin/users/missing/system-role')
+        .set('Authorization', header)
+        .send({ systemRole: 'ADMIN' })
+        .expect(404);
+      await request(app.getHttpServer())
+        .patch('/admin/users/master/system-role')
+        .set('Authorization', 'Bearer ' + token('master'))
+        .send({ systemRole: 'ADMIN' })
+        .expect(403);
+      expect(auditLogs).toEqual([]);
+    });
+    it('rolls back and sanitizes an audit storage failure without emitting success', async () => {
+      prisma.auditLog.create.mockRejectedValueOnce(
+        new Error('private audit SQL password=hidden'),
+      );
+      const response = await request(app.getHttpServer())
+        .patch('/admin/users/master/system-role')
+        .set('Authorization', 'Bearer ' + token('admin'))
+        .send({ systemRole: 'ADMIN' })
+        .expect(500);
+      expect(response.body.code).toBe('INTERNAL_SERVER_ERROR');
+      expect(JSON.stringify(response.body)).not.toContain('private audit');
+      expect(JSON.stringify(logs.error.mock.calls)).not.toContain(
+        'private audit',
+      );
+      expect(users.get('master').systemRole).toBe('USER');
+      expect(auditLogs).toEqual([]);
+    });
+    it('does not expose audit create, update or delete HTTP operations', async () => {
+      const header = 'Bearer ' + token('admin');
+      await request(app.getHttpServer())
+        .post('/admin/audit-logs')
+        .set('Authorization', header)
+        .send({})
+        .expect(404);
+      await request(app.getHttpServer())
+        .patch('/admin/audit-logs/example')
+        .set('Authorization', header)
+        .send({})
+        .expect(404);
+      await request(app.getHttpServer())
+        .delete('/admin/audit-logs/example')
+        .set('Authorization', header)
+        .expect(404);
+      expect(auditLogs).toEqual([]);
+    });
   });
 });

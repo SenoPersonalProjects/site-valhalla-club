@@ -94,6 +94,8 @@ Registra `reviewedById`, `reviewedAt`, `reviewNote`. Uma repetição da mesma de
 REJECTED exige nota não vazia em toda requisição, inclusive em uma repetição:
 sem nota retorna 400; com nota faz no-op e não substitui a justificativa original.
 Não há reversão de rejeição, suspensão/reativação nem grant/remove MASTER aqui.
+Revisão bem-sucedida, inclusive repetição aceita, grava [audit log](audit-log.md)
+na mesma transação, sem copiar a justificativa para metadata.
 Provisionamento inicial de ADMIN/DEV é operacional e controlado, fora do cadastro.
 
 Listagem/detalhe e gerenciamento de papéis de terceiros são fornecidos pelo

@@ -1,3 +1,4 @@
+import { AuditModule } from '../audit/audit.module';
 import { Module } from '@nestjs/common';
 import { PrismaModule } from '../prisma/prisma.module';
 import { TablesModule } from '../tables/tables.module';
@@ -8,7 +9,7 @@ import {
 import { OneShotsService } from './one-shots.service';
 
 @Module({
-  imports: [PrismaModule, TablesModule],
+  imports: [AuditModule, PrismaModule, TablesModule],
   controllers: [OneShotsController, AdminOneShotsController],
   providers: [OneShotsService],
 })

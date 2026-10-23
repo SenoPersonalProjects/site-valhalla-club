@@ -1,3 +1,4 @@
+import { CurrentRequestId } from '../../common/http/current-request-id.decorator';
 import {
   Body,
   Controller,
@@ -42,8 +43,9 @@ export class AdminUsersController {
     @Param('id') id: string,
     @CurrentUserId() actorId: string,
     @Body() dto: ChangeSystemRoleDto,
+    @CurrentRequestId() requestId: string,
   ) {
-    return this.users.changeSystemRole(id, actorId, dto.systemRole);
+    return this.users.changeSystemRole(id, actorId, dto.systemRole, requestId);
   }
 
   @Post(':id/club-roles')
@@ -52,8 +54,9 @@ export class AdminUsersController {
     @Param('id') id: string,
     @CurrentUserId() actorId: string,
     @Body() dto: GrantClubRoleDto,
+    @CurrentRequestId() requestId: string,
   ) {
-    return this.users.grantClubRole(id, actorId, dto.role);
+    return this.users.grantClubRole(id, actorId, dto.role, requestId);
   }
 
   @Delete(':id/club-roles/:role')
@@ -63,7 +66,8 @@ export class AdminUsersController {
     @CurrentUserId() actorId: string,
     @Param('role', new ParseEnumPipe(ClubRole)) role: ClubRole,
     @Body() _dto: RemoveClubRoleDto,
+    @CurrentRequestId() requestId: string,
   ) {
-    return this.users.removeClubRole(id, actorId, role);
+    return this.users.removeClubRole(id, actorId, role, requestId);
   }
 }

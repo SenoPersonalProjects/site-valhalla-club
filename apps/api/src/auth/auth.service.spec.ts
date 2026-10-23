@@ -1,3 +1,4 @@
+import { AuditService } from '../audit/audit.service';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '../generated/prisma/client';
@@ -28,6 +29,9 @@ describe('AuthService', () => {
     passwords as unknown as PasswordService,
     jwt as unknown as JwtService,
     actors as unknown as TableActorsService,
+    {
+      record: jest.fn().mockResolvedValue(undefined),
+    } as unknown as AuditService,
   );
   const registration = {
     email: ' TEST@EXAMPLE.COM ',
@@ -327,6 +331,9 @@ describe('Authentication concurrency', () => {
       {} as PasswordService,
       {} as JwtService,
       new TableActorsService(prisma, new AuthorizationService(prisma)),
+      {
+        record: jest.fn().mockResolvedValue(undefined),
+      } as unknown as AuditService,
     );
     const results = await Promise.allSettled([
       service.review('target', 'reviewer-a', {
@@ -371,6 +378,9 @@ describe('Authentication concurrency', () => {
       {} as PasswordService,
       {} as JwtService,
       {} as TableActorsService,
+      {
+        record: jest.fn().mockResolvedValue(undefined),
+      } as unknown as AuditService,
     );
     await Promise.all([service.logout('user'), service.logout('user')]);
     expect(authVersion).toBe(9);
