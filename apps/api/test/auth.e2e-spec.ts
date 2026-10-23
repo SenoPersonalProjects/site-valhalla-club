@@ -68,6 +68,8 @@ describe('Authentication with real Bearer JWT (e2e)', () => {
       status: 'APPROVED',
       systemRole: 'USER',
       clubRoles: [],
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+      updatedAt: new Date('2026-01-01T00:00:00Z'),
       profile: {
         displayName: id,
         whatsappNumber: `+558299999${id === 'admin' ? '0001' : '0002'}`,
@@ -85,6 +87,29 @@ describe('Authentication with real Bearer JWT (e2e)', () => {
       onModuleInit: jest.fn(),
       onModuleDestroy: jest.fn(),
       user: {
+        findMany: jest.fn(async ({ where, skip = 0, take, select }) =>
+          [...users.values()]
+            .filter((user) =>
+              Object.entries(where).every(
+                ([key, value]) => user[key] === value,
+              ),
+            )
+            .sort(
+              (a, b) =>
+                b.createdAt.getTime() - a.createdAt.getTime() ||
+                b.id.localeCompare(a.id),
+            )
+            .slice(skip, skip + take)
+            .map((user) => project(user, select)),
+        ),
+        count: jest.fn(
+          async ({ where }) =>
+            [...users.values()].filter((user) =>
+              Object.entries(where).every(
+                ([key, value]) => user[key] === value,
+              ),
+            ).length,
+        ),
         findUnique: jest.fn(async ({ where, select }) =>
           project(
             [...users.values()].find((u) =>
@@ -115,7 +140,11 @@ describe('Authentication with real Bearer JWT (e2e)', () => {
         }),
         updateMany: jest.fn(async ({ where, data }) => {
           const user = users.get(where.id);
-          if (!user || (where.status && user.status !== where.status))
+          if (
+            !user ||
+            (where.status && user.status !== where.status) ||
+            (where.systemRole && user.systemRole !== where.systemRole)
+          )
             return { count: 0 };
           for (const [key, value] of Object.entries(data) as [string, any][])
             user[key] = value?.increment ? user[key] + value.increment : value;
@@ -172,6 +201,28 @@ describe('Authentication with real Bearer JWT (e2e)', () => {
         }),
       },
       sessionParticipant: { findMany: jest.fn().mockResolvedValue([]) },
+      userClubRole: {
+        upsert: jest.fn(async ({ where, create, update, select }) => {
+          const user = users.get(where.userId_role.userId);
+          let link = user.clubRoles.find(
+            (item) => item.role === where.userId_role.role,
+          );
+          if (link) Object.assign(link, update);
+          else {
+            link = { ...create };
+            user.clubRoles.push(link);
+          }
+          return project(link, select);
+        }),
+        deleteMany: jest.fn(async ({ where }) => {
+          const user = users.get(where.userId);
+          const before = user.clubRoles.length;
+          user.clubRoles = user.clubRoles.filter(
+            (item) => item.role !== where.role,
+          );
+          return { count: before - user.clubRoles.length };
+        }),
+      },
       profile: {
         update: jest.fn(async ({ where, data, select }) => {
           const user = users.get(where.userId);
@@ -934,6 +985,427 @@ describe('Authentication with real Bearer JWT (e2e)', () => {
     expect(response.body.code).toBe('PROFILE_NOT_FOUND');
     expect(JSON.stringify(response.body)).not.toContain('private missing');
   });
+  const adminUserOperations = [
+    ['get', '/admin/users', undefined],
+    ['get', '/admin/users/master', undefined],
+    ['patch', '/admin/users/master/system-role', { systemRole: 'ADMIN' }],
+    ['post', '/admin/users/master/club-roles', { role: 'PLAYER' }],
+    ['delete', '/admin/users/master/club-roles/PLAYER', {}],
+  ] as const;
+  it.each(['missing Bearer', 'x-user-id', 'revoked', 'USER', 'club admin'])(
+    'protects every admin user operation from %s',
+    async (scenario) => {
+      seed('unprivileged', {
+        clubRoles: scenario === 'club admin' ? [{ role: 'ADMIN' }] : [],
+      });
+      const bearer =
+        scenario === 'revoked'
+          ? token('admin')
+          : token('unprivileged', {
+              systemRole: 'DEV',
+              clubRoles: ['MASTER', 'ADMIN'],
+            });
+      if (scenario === 'revoked') users.get('admin').authVersion++;
+      const expected = ['missing Bearer', 'x-user-id', 'revoked'].includes(
+        scenario,
+      )
+        ? 401
+        : 403;
+      for (const [method, path, body] of adminUserOperations) {
+        const req = request(app.getHttpServer())
+          [method](path)
+          .set('x-user-id', 'admin')
+          .set('systemRole', 'DEV');
+        if (scenario !== 'missing Bearer' && scenario !== 'x-user-id')
+          req.set('Authorization', `Bearer ${bearer}`);
+        const response = await req.send(body ?? {}).expect(expected);
+        expect(response.body.code).toBe(
+          expected === 403
+            ? 'ADMIN_ROLE_REQUIRED'
+            : scenario === 'revoked'
+              ? 'AUTH_TOKEN_REVOKED'
+              : 'AUTH_TOKEN_REQUIRED',
+        );
+      }
+      expect(prisma.userClubRole.upsert).not.toHaveBeenCalled();
+      expect(prisma.userClubRole.deleteMany).not.toHaveBeenCalled();
+      expect(prisma.user.updateMany).not.toHaveBeenCalled();
+    },
+  );
+  it.each(
+    ['ADMIN', 'DEV'].flatMap((role) =>
+      ['PENDING', 'SUSPENDED'].map((status) => ({ role, status })),
+    ),
+  )(
+    'denies every admin user operation for $status $role',
+    async ({ role, status }) => {
+      seed('blocked-admin', { systemRole: role, status });
+      for (const [method, path, body] of adminUserOperations)
+        await request(app.getHttpServer())
+          [method](path)
+          .set('Authorization', `Bearer ${token('blocked-admin')}`)
+          .send(body ?? {})
+          .expect(401);
+    },
+  );
+  it.each(['ADMIN', 'DEV'])(
+    'allows %s to list/detail and perform explicit mutations on another approved user',
+    async (role) => {
+      seed('operator', { systemRole: role });
+      const bearer = token('operator');
+      for (const [method, path, body] of adminUserOperations)
+        await request(app.getHttpServer())
+          [method](path)
+          .set('Authorization', `Bearer ${bearer}`)
+          .send(body ?? {})
+          .expect(method === 'delete' ? 204 : 200);
+      expect(users.get('master').systemRole).toBe('ADMIN');
+      expect(
+        users.get('master').clubRoles.some((link) => link.role === 'MASTER'),
+      ).toBe(true);
+    },
+  );
+  it('returns bounded filtered stable pages without list PII or private auth/discipline fields', async () => {
+    for (const id of ['candidate-a', 'candidate-c', 'candidate-b'])
+      seed(id, {
+        status: 'PENDING',
+        reviewNote: 'private review',
+        suspensionReason: 'private reason',
+      });
+    const bearer = token('admin');
+    const first = await request(app.getHttpServer())
+      .get('/admin/users?page=1&limit=2&status=PENDING&systemRole=USER')
+      .set('Authorization', `Bearer ${bearer}`)
+      .expect(200);
+    const second = await request(app.getHttpServer())
+      .get('/admin/users?page=2&limit=2&status=PENDING&systemRole=USER')
+      .set('Authorization', `Bearer ${bearer}`)
+      .expect(200);
+    expect(first.body.items.map((user) => user.id)).toEqual([
+      'candidate-c',
+      'candidate-b',
+    ]);
+    expect(second.body.items.map((user) => user.id)).toEqual(['candidate-a']);
+    expect(first.body.meta).toEqual({ page: 1, limit: 2, total: 3, pages: 2 });
+    expect(first.body.items[0]).toEqual({
+      id: 'candidate-c',
+      status: 'PENDING',
+      systemRole: 'USER',
+      clubRoles: [],
+      profile: { displayName: 'candidate-c' },
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+    const listQuery = prisma.user.findMany.mock.calls[0][0];
+    for (const forbidden of [
+      'email',
+      'whatsappNumber',
+      'birthDate',
+      'passwordHash',
+      'authVersion',
+      'reviewNote',
+      'suspensionReason',
+      'reports',
+      'deletionRequestedAt',
+      'deletionExpiresAt',
+    ])
+      expect(
+        JSON.stringify([first.body, second.body, listQuery.select]),
+      ).not.toContain(forbidden);
+  });
+  it.each([
+    'page=0',
+    'page=1.5',
+    'page=1e100',
+    'limit=0',
+    'limit=51',
+    'status=NOT_A_STATUS',
+    'systemRole=OWNER',
+    'email=person@example.com',
+    'userId=admin',
+  ])('rejects invalid/unsupported admin user query %s', async (query) => {
+    await request(app.getHttpServer())
+      .get('/admin/users?' + query)
+      .set('Authorization', `Bearer ${token('admin')}`)
+      .expect(400);
+    expect(prisma.user.findMany).not.toHaveBeenCalled();
+  });
+  it('returns operational detail with email but no contact, birth date, free-text notes or credentials', async () => {
+    Object.assign(users.get('master'), {
+      reviewedAt: new Date('2026-01-01Z'),
+      reviewNote: 'private review',
+      suspensionReason: 'private reason',
+      reviewedById: 'admin',
+      deletionRequestedAt: null,
+      deletionExpiresAt: null,
+    });
+    const response = await request(app.getHttpServer())
+      .get('/admin/users/master')
+      .set('Authorization', `Bearer ${token('admin')}`)
+      .expect(200);
+    expect(response.body).toMatchObject({
+      id: 'master',
+      email: 'master@example.com',
+      profile: { displayName: 'master' },
+      reviewedAt: '2026-01-01T00:00:00.000Z',
+    });
+    for (const field of [
+      'passwordHash',
+      'authVersion',
+      'whatsappNumber',
+      'birthDate',
+      'reviewNote',
+      'reviewedById',
+      'suspensionReason',
+    ])
+      expect(JSON.stringify(response.body)).not.toContain(field);
+    const missing = await request(app.getHttpServer())
+      .get('/admin/users/missing')
+      .set('Authorization', `Bearer ${token('admin')}`)
+      .expect(404);
+    expect(missing.body.code).toBe('USER_NOT_FOUND');
+    await request(app.getHttpServer())
+      .get('/admin/users/master')
+      .set('Authorization', `Bearer ${token()}`)
+      .expect(403);
+  });
+  it('uses current SystemRole on the next request with the same old JWT after promotion and demotion', async () => {
+    seed('candidate');
+    const bearer = (await login('candidate').expect(200)).body.accessToken;
+    const operator = token('admin');
+    await request(app.getHttpServer())
+      .get('/admin/users')
+      .set('Authorization', `Bearer ${bearer}`)
+      .expect(403);
+    await request(app.getHttpServer())
+      .patch('/admin/users/candidate/system-role')
+      .set('Authorization', `Bearer ${operator}`)
+      .send({ systemRole: 'DEV' })
+      .expect(200, { id: 'candidate', systemRole: 'DEV' });
+    const devBearer = (await login('candidate').expect(200)).body.accessToken;
+    await request(app.getHttpServer())
+      .get('/admin/users')
+      .set('Authorization', `Bearer ${devBearer}`)
+      .expect(200);
+    // Explicit technical promotion still does not imply a business MASTER role.
+    await request(app.getHttpServer())
+      .post('/campaigns')
+      .set('Authorization', `Bearer ${bearer}`)
+      .send(masterOperations[0].body)
+      .expect(403);
+    expect(jwt.verify(bearer)).not.toHaveProperty('systemRole');
+    expect(jwt.verify(bearer)).not.toHaveProperty('clubRoles');
+    await request(app.getHttpServer())
+      .patch('/admin/users/candidate/system-role')
+      .set('Authorization', `Bearer ${operator}`)
+      .send({ systemRole: 'USER' })
+      .expect(200);
+    await request(app.getHttpServer())
+      .get('/admin/users')
+      .set('Authorization', `Bearer ${devBearer}`)
+      .expect(403);
+    const authenticated = await request(app.getHttpServer())
+      .get('/auth/me')
+      .set('Authorization', `Bearer ${devBearer}`)
+      .expect(200);
+    expect(authenticated.body).toMatchObject({
+      id: 'candidate',
+      status: 'APPROVED',
+      systemRole: 'USER',
+    });
+    expect(users.get('candidate')).toMatchObject({
+      status: 'APPROVED',
+      systemRole: 'USER',
+      authVersion: 0,
+      clubRoles: [],
+    });
+  });
+  it('applies cumulative club grants/removal immediately without reissuing JWT or changing SystemRole', async () => {
+    seed('candidate');
+    seed('second-admin', { systemRole: 'DEV' });
+    const bearer = (await login('candidate').expect(200)).body.accessToken;
+    const operator = token('admin');
+    const create = (accessToken = bearer) =>
+      request(app.getHttpServer())
+        .post('/campaigns')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send(masterOperations[0].body);
+    await create().expect(403);
+    for (const role of ['PLAYER', 'ADMIN'])
+      await request(app.getHttpServer())
+        .post('/admin/users/candidate/club-roles')
+        .set('Authorization', `Bearer ${operator}`)
+        .send({ role })
+        .expect(200);
+    await create().expect(403);
+    await request(app.getHttpServer())
+      .get('/admin/users')
+      .set('Authorization', `Bearer ${bearer}`)
+      .expect(403);
+    const first = await request(app.getHttpServer())
+      .post('/admin/users/candidate/club-roles')
+      .set('Authorization', `Bearer ${operator}`)
+      .send({ role: 'MASTER' })
+      .expect(200);
+    const repeated = await request(app.getHttpServer())
+      .post('/admin/users/candidate/club-roles')
+      .set('Authorization', `Bearer ${token('second-admin')}`)
+      .send({ role: 'MASTER' })
+      .expect(200);
+    expect(repeated.body).toEqual(first.body);
+    expect(users.get('candidate').clubRoles).toHaveLength(3);
+    expect(
+      users.get('candidate').clubRoles.find((link) => link.role === 'MASTER')
+        .grantedById,
+    ).toBe('admin');
+    const masterBearer = (await login('candidate').expect(200)).body
+      .accessToken;
+    await create(masterBearer).expect(201);
+    for (let i = 0; i < 2; i++)
+      await request(app.getHttpServer())
+        .delete('/admin/users/candidate/club-roles/MASTER')
+        .set('Authorization', `Bearer ${operator}`)
+        .expect(204);
+    await create(masterBearer).expect(403);
+    const authenticated = await request(app.getHttpServer())
+      .get('/auth/me')
+      .set('Authorization', `Bearer ${masterBearer}`)
+      .expect(200);
+    expect(authenticated.body).toMatchObject({
+      id: 'candidate',
+      status: 'APPROVED',
+      systemRole: 'USER',
+    });
+    expect(authenticated.body.clubRoles).toEqual(
+      expect.arrayContaining([{ role: 'PLAYER' }, { role: 'ADMIN' }]),
+    );
+    expect(authenticated.body.clubRoles).not.toContainEqual({ role: 'MASTER' });
+    expect(users.get('candidate')).toMatchObject({
+      systemRole: 'USER',
+      status: 'APPROVED',
+      authVersion: 0,
+    });
+    expect(
+      users
+        .get('candidate')
+        .clubRoles.map((link) => link.role)
+        .sort(),
+    ).toEqual(['ADMIN', 'PLAYER']);
+  });
+  it.each([
+    'PENDING',
+    'REJECTED',
+    'SUSPENDED',
+    'DELETION_PENDING',
+    'ANONYMIZED',
+  ])('never overwrites/restores an incompatible %s target', async (status) => {
+    users.get('master').status = status;
+    Object.assign(users.get('master').clubRoles[0], {
+      grantedById: 'original-operator',
+      grantedAt: new Date('2026-01-01Z'),
+    });
+    const before = structuredClone(users.get('master'));
+    for (const [method, path, body] of adminUserOperations.slice(2)) {
+      const response = await request(app.getHttpServer())
+        [method](path)
+        .set('Authorization', `Bearer ${token('admin')}`)
+        .send(body ?? {})
+        .expect(409);
+      expect(response.body.code).toBe('USER_ADMIN_OPERATION_NOT_ALLOWED');
+    }
+    expect(users.get('master').status).toBe(status);
+    expect(users.get('master')).toEqual(before);
+    expect(prisma.user.updateMany).not.toHaveBeenCalled();
+    expect(prisma.userClubRole.upsert).not.toHaveBeenCalled();
+    expect(prisma.userClubRole.deleteMany).not.toHaveBeenCalled();
+  });
+  it.each([
+    ['patch', '/admin/users/master/system-role', { systemRole: 'ROOT' }],
+    [
+      'patch',
+      '/admin/users/master/system-role',
+      { systemRole: 'DEV', status: 'APPROVED' },
+    ],
+    [
+      'patch',
+      '/admin/users/master/system-role',
+      { systemRole: 'DEV', authVersion: 99 },
+    ],
+    ['post', '/admin/users/master/club-roles', { role: 'OWNER' }],
+    [
+      'post',
+      '/admin/users/master/club-roles',
+      { role: 'MASTER', grantedById: 'master' },
+    ],
+    [
+      'post',
+      '/admin/users/master/club-roles',
+      { role: 'MASTER', userId: 'admin' },
+    ],
+    ['delete', '/admin/users/master/club-roles/OWNER', {}],
+    ['delete', '/admin/users/master/club-roles/MASTER', { status: 'APPROVED' }],
+  ])(
+    'rejects invalid enum/mass assignment for %s %s',
+    async (method, path, body) => {
+      await request(app.getHttpServer())
+        [method as string](path as string)
+        .set('Authorization', `Bearer ${token('admin')}`)
+        .send(body)
+        .expect(400);
+      expect(prisma.user.updateMany).not.toHaveBeenCalled();
+      expect(prisma.userClubRole.upsert).not.toHaveBeenCalled();
+      expect(prisma.userClubRole.deleteMany).not.toHaveBeenCalled();
+    },
+  );
+  it('denies all self-role changes and cannot select an operator from body/query/header', async () => {
+    const bearer = token('admin');
+    for (const [method, path, body] of adminUserOperations.slice(2))
+      await request(app.getHttpServer())
+        [method](path.replace('/master/', '/admin/'))
+        .set('Authorization', `Bearer ${bearer}`)
+        .send(body ?? {})
+        .expect(409);
+    await request(app.getHttpServer())
+      .patch('/admin/users/admin/system-role?actorId=admin')
+      .set('Authorization', `Bearer ${token()}`)
+      .set('x-user-id', 'admin')
+      .send({ systemRole: 'USER', actorId: 'admin' })
+      .expect(403);
+    expect(users.get('admin').systemRole).toBe('ADMIN');
+  });
+  it('sanitizes admin user failures and never logs detail PII or role payloads', async () => {
+    const bearer = token('admin');
+    await request(app.getHttpServer())
+      .get('/admin/users/master')
+      .set('Authorization', `Bearer ${bearer}`)
+      .expect(200);
+    prisma.user.findMany.mockRejectedValueOnce(
+      new Error('private Prisma SQL password=synthetic-secret'),
+    );
+    const response = await request(app.getHttpServer())
+      .get('/admin/users')
+      .set('Authorization', `Bearer ${bearer}`)
+      .expect(500);
+    expect(response.body).toMatchObject({
+      code: 'INTERNAL_SERVER_ERROR',
+      message: 'Internal server error',
+    });
+    const logged = JSON.stringify([
+      response.body,
+      logs.info.mock.calls,
+      logs.error.mock.calls,
+    ]);
+    for (const value of [
+      bearer,
+      password,
+      'master@example.com',
+      users.get('master').profile.whatsappNumber,
+      'synthetic-secret',
+      '1990-01-01',
+    ])
+      expect(logged).not.toContain(value);
+  });
+
   it('does not distinguish unknown email and wrong password', async () => {
     const wrong = await login('master', 'wrong').expect(401);
     const absent = await login('absent', 'wrong').expect(401);

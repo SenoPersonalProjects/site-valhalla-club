@@ -96,6 +96,10 @@ sem nota retorna 400; com nota faz no-op e não substitui a justificativa origin
 Não há reversão de rejeição, suspensão/reativação nem grant/remove MASTER aqui.
 Provisionamento inicial de ADMIN/DEV é operacional e controlado, fora do cadastro.
 
+Listagem/detalhe e gerenciamento de papéis de terceiros são fornecidos pelo
+[módulo administrativo de usuários](admin-users.md). Não alteram o contrato
+de cadastro, revisão inicial, JWT ou login descrito aqui.
+
 ## Erros
 
 | HTTP | Código | Condição |

@@ -47,6 +47,11 @@ ADMIN e DEV de sistema têm o mesmo acesso às operações administrativas atuai
 A infraestrutura permite exigir apenas DEV futuramente, sem conceder esse
 acesso automaticamente a ADMIN. Nenhuma operação exclusiva de DEV foi criada.
 
+A [administração de usuários](admin-users.md), task `86e39wj3k`, implementa
+alteração explícita de SystemRole e grant/remove de ClubRoles em outras contas
+APPROVED. Não modifica a matriz acima, não autoriza autoalteração e não coloca
+papéis no JWT. O efeito aparece no request posterior com o mesmo token.
+
 ## Contratos reutilizáveis
 
 `AuthorizationService.assertRoles(userId, requirement, client?)` consulta somente
@@ -80,6 +85,9 @@ antes da camada de roles.
 | Rota com autorização declarativa | Requisito |
 | --- | --- |
 | PATCH `/admin/users/:id/registration-review` | ADMIN ou DEV de sistema |
+| GET `/admin/users`, GET `/admin/users/:id` | ADMIN ou DEV de sistema |
+| PATCH `/admin/users/:id/system-role` | ADMIN ou DEV de sistema; outro alvo APPROVED |
+| POST `/admin/users/:id/club-roles`, DELETE `/admin/users/:id/club-roles/:role` | ADMIN ou DEV de sistema; outro alvo APPROVED |
 | PATCH `/admin/campaigns/:id/approval` | ADMIN ou DEV de sistema |
 | PATCH `/admin/one-shots/:id/approval` | ADMIN ou DEV de sistema |
 | PATCH `/admin/one-shots/:id/correction` | ADMIN ou DEV de sistema |
@@ -126,5 +134,6 @@ cada tentativa, antes da quota e da criação atômica do agregado.
 | 403 SYSTEM_ROLE_REQUIRED | Requisito genérico de sistema não satisfeito |
 | 403 CLUB_ROLE_REQUIRED | Requisito genérico de clube não satisfeito |
 
-Os erros não retornam os papéis do usuário ou dados pessoais. A camada não cria
-endpoints para conceder/remover papéis, promover usuários, nem audit log.
+Os erros não retornam os papéis do usuário ou dados pessoais. A camada central
+não cria endpoints nem audit log; os contratos de gerenciamento de papéis,
+estados e erros próprios estão em [admin-users.md](admin-users.md).
