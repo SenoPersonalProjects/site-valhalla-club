@@ -4,6 +4,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { AuditService } from '../../audit/audit.service';
+import { AUDIT_ACTION, AUDIT_ENTITY } from '../../audit/audit.constants';
 import { ADMINISTRATOR_REQUIREMENT } from '../../authorization/authorization.policies';
 import { AuthorizationService } from '../../authorization/authorization.service';
 import { Prisma } from '../../generated/prisma/client';
@@ -41,6 +43,7 @@ export class AdminUsersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly authorization: AuthorizationService,
+    private readonly audit: AuditService,
   ) {}
 
   async list(actorId: string, query: ListAdminUsersDto) {
@@ -105,9 +108,15 @@ export class AdminUsersService {
     );
   }
 
-  async changeSystemRole(id: string, actorId: string, systemRole: SystemRole) {
+  async changeSystemRole(
+    id: string,
+    actorId: string,
+    systemRole: SystemRole,
+    requestId?: string,
+  ) {
     return this.systemRoleTransaction(async (transaction) => {
       const user = await this.assertTarget(transaction, id, actorId);
+      const fromSystemRole = user.systemRole;
       if (user.systemRole !== systemRole) {
         const result = await transaction.user.updateMany({
           where: {
@@ -119,24 +128,57 @@ export class AdminUsersService {
         });
         if (!result.count) throw roleConflict();
       }
+      await this.audit.record(transaction, {
+        actorId,
+        action: AUDIT_ACTION.USER_SYSTEM_ROLE_CHANGED,
+        entityType: AUDIT_ENTITY.USER,
+        entityId: id,
+        requestId,
+        metadata: {
+          changed: fromSystemRole !== systemRole,
+          fromSystemRole,
+          toSystemRole: systemRole,
+        },
+      });
       return { id, systemRole };
     });
   }
 
-  async grantClubRole(id: string, actorId: string, role: ClubRole) {
+  async grantClubRole(
+    id: string,
+    actorId: string,
+    role: ClubRole,
+    requestId?: string,
+  ) {
     return this.clubRoleTransaction(async (transaction) => {
       await this.assertTarget(transaction, id, actorId);
-      return transaction.userClubRole.upsert({
-        where: { userId_role: { userId: id, role } },
-        create: {
+      // The unique insert's count is authoritative, unlike a pre-read. Let
+      // Prisma keep generating the established cuid() identity.
+      const inserted = await transaction.userClubRole.createMany({
+        data: {
           userId: id,
           role,
           grantedById: actorId,
           grantedAt: new Date(),
         },
-        update: {},
+        skipDuplicates: true,
+      });
+      const granted = await transaction.userClubRole.findUnique({
+        where: { userId_role: { userId: id, role } },
         select: { role: true, grantedAt: true },
       });
+      // A concurrent removal may win between a duplicate insert and this read.
+      // Fail closed instead of returning a success based on a vanished link.
+      if (!granted) throw roleConflict();
+      await this.audit.record(transaction, {
+        actorId,
+        action: AUDIT_ACTION.USER_CLUB_ROLE_GRANTED,
+        entityType: AUDIT_ENTITY.USER,
+        entityId: id,
+        requestId,
+        metadata: { changed: inserted.count > 0, role },
+      });
+      return { role: granted.role, grantedAt: granted.grantedAt };
     });
   }
 
@@ -144,11 +186,20 @@ export class AdminUsersService {
     id: string,
     actorId: string,
     role: ClubRole,
+    requestId?: string,
   ): Promise<void> {
     return this.clubRoleTransaction(async (transaction) => {
       await this.assertTarget(transaction, id, actorId);
-      await transaction.userClubRole.deleteMany({
+      const result = await transaction.userClubRole.deleteMany({
         where: { userId: id, role },
+      });
+      await this.audit.record(transaction, {
+        actorId,
+        action: AUDIT_ACTION.USER_CLUB_ROLE_REMOVED,
+        entityType: AUDIT_ENTITY.USER,
+        entityId: id,
+        requestId,
+        metadata: { changed: result.count > 0, role },
       });
     });
   }

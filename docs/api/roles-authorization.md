@@ -86,6 +86,7 @@ antes da camada de roles.
 | --- | --- |
 | PATCH `/admin/users/:id/registration-review` | ADMIN ou DEV de sistema |
 | GET `/admin/users`, GET `/admin/users/:id` | ADMIN ou DEV de sistema |
+| GET `/admin/audit-logs` | ADMIN ou DEV de sistema; consulta read-only |
 | PATCH `/admin/users/:id/system-role` | ADMIN ou DEV de sistema; outro alvo APPROVED |
 | POST `/admin/users/:id/club-roles`, DELETE `/admin/users/:id/club-roles/:role` | ADMIN ou DEV de sistema; outro alvo APPROVED |
 | PATCH `/admin/campaigns/:id/approval` | ADMIN ou DEV de sistema |
@@ -135,5 +136,6 @@ cada tentativa, antes da quota e da criação atômica do agregado.
 | 403 CLUB_ROLE_REQUIRED | Requisito genérico de clube não satisfeito |
 
 Os erros não retornam os papéis do usuário ou dados pessoais. A camada central
-não cria endpoints nem audit log; os contratos de gerenciamento de papéis,
+não persiste auditoria; o [audit log](audit-log.md) integra eventos às transações
+administrativas. Os contratos de gerenciamento de papéis,
 estados e erros próprios estão em [admin-users.md](admin-users.md).

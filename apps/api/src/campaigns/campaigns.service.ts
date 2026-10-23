@@ -1,4 +1,6 @@
 import { Injectable } from '@nestjs/common';
+import { AuditService } from '../audit/audit.service';
+import { AUDIT_ACTION, AUDIT_ENTITY } from '../audit/audit.constants';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { ApprovalStatus, CampaignStatus } from '../generated/prisma/enums';
 import { Prisma } from '../generated/prisma/client';
@@ -49,6 +51,7 @@ export class CampaignsService {
     private readonly prisma: PrismaService,
     private readonly actors: TableActorsService,
     private readonly rules: TableRulesService,
+    private readonly audit: AuditService,
   ) {}
 
   async create(actorId: string, dto: CreateCampaignDto) {
@@ -272,10 +275,16 @@ export class CampaignsService {
     });
   }
 
-  async review(id: string, reviewerId: string, dto: ReviewCampaignDto) {
+  async review(
+    id: string,
+    reviewerId: string,
+    dto: ReviewCampaignDto,
+    requestId?: string,
+  ) {
     return this.rules.serializable(async (transaction) => {
       await this.actors.assertAdministrator(reviewerId, transaction);
       const campaign = await this.getByIdOrThrow(id, transaction);
+      const fromApprovalStatus = campaign.approvalStatus;
       const note = this.normalizeOptionalText(dto.note);
 
       if (
@@ -307,10 +316,28 @@ export class CampaignsService {
         campaign.approvalStatus === ApprovalStatus.APPROVED &&
         dto.decision === ApprovalStatus.APPROVED
       ) {
+        await this.audit.record(transaction, {
+          actorId: reviewerId,
+          action: AUDIT_ACTION.CAMPAIGN_APPROVAL_REVIEWED,
+          entityType: AUDIT_ENTITY.CAMPAIGN,
+          entityId: id,
+          requestId,
+          metadata: {
+            changed: false,
+            fromApprovalStatus,
+            toApprovalStatus: dto.decision,
+          },
+        });
         return campaign;
       }
 
-      return transaction.campaign.update({
+      const changed =
+        fromApprovalStatus !== dto.decision ||
+        campaign.reviewedById !== reviewerId ||
+        (campaign.reviewNote ?? null) !== note ||
+        (dto.decision === ApprovalStatus.REJECTED &&
+          campaign.status === CampaignStatus.ACTIVE);
+      const result = await transaction.campaign.update({
         where: { id },
         data: {
           approvalStatus: dto.decision,
@@ -324,6 +351,20 @@ export class CampaignsService {
         },
         include: campaignDetails,
       });
+      await this.audit.record(transaction, {
+        actorId: reviewerId,
+        action: AUDIT_ACTION.CAMPAIGN_APPROVAL_REVIEWED,
+        entityType: AUDIT_ENTITY.CAMPAIGN,
+        entityId: id,
+        requestId,
+        // Preserve review writes; timestamp renewal alone is not a functional change.
+        metadata: {
+          changed,
+          fromApprovalStatus,
+          toApprovalStatus: dto.decision,
+        },
+      });
+      return result;
     });
   }
 

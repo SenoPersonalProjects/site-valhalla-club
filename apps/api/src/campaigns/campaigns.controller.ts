@@ -1,3 +1,4 @@
+import { CurrentRequestId } from '../common/http/current-request-id.decorator';
 import { RequireRoles } from '../authorization/require-roles.decorator';
 import {
   ADMINISTRATOR_REQUIREMENT,
@@ -88,7 +89,8 @@ export class AdminCampaignsController {
     @Param('id') id: string,
     @CurrentUserId() reviewerId: string,
     @Body() dto: ReviewCampaignDto,
+    @CurrentRequestId() requestId: string,
   ) {
-    return this.campaignsService.review(id, reviewerId, dto);
+    return this.campaignsService.review(id, reviewerId, dto, requestId);
   }
 }

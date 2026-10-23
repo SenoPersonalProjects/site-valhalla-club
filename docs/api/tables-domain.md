@@ -274,6 +274,11 @@ não removem aprovação; correção estrutural de OneShot é exclusivamente
 administrativa e também remove aprovação. Publicação continua exigindo aprovação
 inicial em ambos os agregados.
 
+Aprovação administrativa de Campaign/OneShot e correção administrativa de
+OneShot persistem [audit log](audit-log.md) na mesma transação, com requestId e
+metadata mínima, sem notas ou conteúdo da mesa. As demais ações de mestre ou
+gerenciamento comum não são auditadas por esse contrato.
+
 ## Mesas do usuário
 
 `GET /tables/me` retorna duas visões:

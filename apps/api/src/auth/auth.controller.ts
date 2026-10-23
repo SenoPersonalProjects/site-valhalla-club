@@ -1,3 +1,4 @@
+import { CurrentRequestId } from '../common/http/current-request-id.decorator';
 import { RequireRoles } from '../authorization/require-roles.decorator';
 import { ADMINISTRATOR_REQUIREMENT } from '../authorization/authorization.policies';
 import {
@@ -51,7 +52,8 @@ export class RegistrationReviewController {
     @Param('id') id: string,
     @CurrentUserId() reviewerId: string,
     @Body() dto: RegistrationReviewDto,
+    @CurrentRequestId() requestId: string,
   ) {
-    return this.auth.review(id, reviewerId, dto);
+    return this.auth.review(id, reviewerId, dto, requestId);
   }
 }

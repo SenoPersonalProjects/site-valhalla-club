@@ -1,3 +1,4 @@
+import { AuditService } from '../audit/audit.service';
 import { ApprovalStatus, CampaignStatus } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { TableActorsService } from '../tables/table-actors.service';
@@ -32,6 +33,9 @@ describe('CampaignsService', () => {
     prisma,
     actorMethods as unknown as TableActorsService,
     new TableRulesService(prisma),
+    {
+      record: jest.fn().mockResolvedValue(undefined),
+    } as unknown as AuditService,
   );
 
   const campaign = {

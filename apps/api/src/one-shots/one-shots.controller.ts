@@ -1,3 +1,4 @@
+import { CurrentRequestId } from '../common/http/current-request-id.decorator';
 import { RequireRoles } from '../authorization/require-roles.decorator';
 import {
   ADMINISTRATOR_REQUIREMENT,
@@ -89,8 +90,9 @@ export class AdminOneShotsController {
     @Param('id') id: string,
     @CurrentUserId() userId: string,
     @Body() dto: CorrectOneShotDto,
+    @CurrentRequestId() requestId: string,
   ) {
-    return this.oneShotsService.correct(id, userId, dto);
+    return this.oneShotsService.correct(id, userId, dto, requestId);
   }
 
   @Patch(':id/approval')
@@ -98,7 +100,8 @@ export class AdminOneShotsController {
     @Param('id') id: string,
     @CurrentUserId() reviewerId: string,
     @Body() dto: ReviewOneShotDto,
+    @CurrentRequestId() requestId: string,
   ) {
-    return this.oneShotsService.review(id, reviewerId, dto);
+    return this.oneShotsService.review(id, reviewerId, dto, requestId);
   }
 }

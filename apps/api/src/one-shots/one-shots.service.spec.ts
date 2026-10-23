@@ -1,3 +1,4 @@
+import { AuditService } from '../audit/audit.service';
 import {
   ApprovalStatus,
   OneShotStatus,
@@ -41,6 +42,9 @@ describe('OneShotsService', () => {
     prisma,
     actorMethods as unknown as TableActorsService,
     new TableRulesService(prisma),
+    {
+      record: jest.fn().mockResolvedValue(undefined),
+    } as unknown as AuditService,
   );
 
   const futureDate = new Date(Date.now() + 86_400_000);

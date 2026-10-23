@@ -79,8 +79,9 @@ Grant usa a chave única userId + role, registra grantedById pelo operador
 autenticado e grantedAt pelo relógio da API. Repetição é idempotente: conserva
 concessor/data originais, sem conceder PLAYER automaticamente ou hierarquia.
 DELETE remove somente o vínculo alvo/role; ausência é no-op com 204. Remover
-MASTER não remove PLAYER/ADMIN nem muda SystemRole. Histórico de revogações
-pertence ao audit log futuro, não a um novo mecanismo paralelo nesta task.
+MASTER não remove PLAYER/ADMIN nem muda SystemRole. Concessões e revogações
+integram o [audit log administrativo](audit-log.md) na mesma transação,
+sem dados pessoais em metadata.
 
 Tokens existentes continuam válidos como autenticação se status/authVersion
 permitem; o próximo request já observa o novo papel no banco. Não é necessário
@@ -102,7 +103,7 @@ retorna 409 USER_ROLE_CONFLICT; outras falhas não são engolidas.
 
 **Grant/remove de ClubRole usam ReadCommitted, sem retry automático.** Papéis de
 clube não concedem autorização técnica ao operador, portanto essas escritas não
-formam o ciclo acima. A chave única userId + role, o upsert e o delete atômico
+formam o ciclo acima. A chave única userId + role, o insert com skipDuplicates e o delete atômico
 coordenam o vínculo afetado; não existe quota ou outra invariante entre vínculos
 que justifique Serializable. Grant duplicado conserva metadados e remoção
 ausente permanece no-op. P2002/P2034 residual retorna 409 USER_ROLE_CONFLICT,
@@ -143,9 +144,9 @@ perfis, email, contatos, nascimento, notas, tokens ou bodies administrativos.
 - Não há recuperação de DELETION_PENDING nem anonimização definitiva.
 - Reports, warnings, pesos/recorrência, sanctions, expulsão, appeals e moderação
   de feedback permanecem fora do escopo. Nenhum dado dessas áreas é exposto.
-- Audit log administrativo completo permanece pendente. As concessões possuem
-  metadados no vínculo existente, mas não se declara histórico completo de
-  alterações/revogações entregue.
+- O [audit log administrativo](audit-log.md) registra revisão inicial e mutações
+  de papéis bem-sucedidas, inclusive no-ops; não é histórico disciplinar ou
+  auditoria de leituras/falhas.
 - Autoalteração de papéis é restrita; isso não cria uma política global de último
   administrador. Autoexclusão existente ainda pode indisponibilizar um operador.
   Governança de continuidade e eventual política de último operador precisam de
