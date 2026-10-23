@@ -13,6 +13,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { AccountsModule } from './accounts/accounts.module';
+import { AdminUsersModule } from './admin/users/admin-users.module';
 import { CampaignsModule } from './campaigns/campaigns.module';
 import { OneShotsModule } from './one-shots/one-shots.module';
 import { ApiExceptionFilter } from './observability/api-exception.filter';
@@ -30,6 +31,7 @@ import { TablesModule } from './tables/tables.module';
     PrismaModule,
     AuthModule,
     AccountsModule,
+    AdminUsersModule,
     TablesModule,
     CampaignsModule,
     SessionsModule,

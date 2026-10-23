@@ -24,7 +24,9 @@ A [camada de autorização](../../docs/api/roles-authorization.md) centraliza os
 requisitos de SystemRole e ClubRole, com guard global após a autenticação e
 verificação no banco também pelos serviços, incluindo TransactionClient.
 ClubRole.ADMIN não concede administração técnica; somente contas APPROVED
-exercem roles. Administração completa de usuários permanece fora do escopo.
+exercem roles. A [administração técnica de usuários](../../docs/api/admin-users.md)
+permite listagem/detalhe mínimos e alteração explícita de papéis de terceiros
+APPROVED. Suspensão, recuperação e disciplina permanecem fora desse fluxo.
 O cadastro não concede papéis de clube automaticamente.
 
 O [perfil e ciclo de vida da própria conta](../../docs/api/account-lifecycle.md)
