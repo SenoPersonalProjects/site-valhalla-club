@@ -70,7 +70,7 @@ Os modelos existem no schema, mas isso não comprova fluxo de aplicação pronto
 | Campanhas, por status | Estoque e atividade de mesas contínuas | `Campaign`; agregação possível, não coletada | Semanal | Consultas, listagens e histórico |
 | One-shots, por status | Volume de aventuras pontuais | `OneShot`; agregação possível, não coletada | Semanal | Picos de agenda e crescimento |
 | Sessões, por status e período | Volume operacional e sazonalidade | `Session`; agregação possível, não coletada | Semanal e em eventos | Relacionar agenda a picos reais de requests |
-| Participantes | Participações por status e usuários distintos em separado | `SessionParticipant`; schema existente, fluxo ainda pendente | Semanal quando implementado | Cardinalidade das relações e consultas |
+| Participantes | Participações por status e usuários distintos em separado | `SessionParticipant`; inclusão/chamada implementadas e validadas localmente, sem coleta agregada | Semanal quando a coleta estiver disponível | Cardinalidade das relações e consultas |
 | Crescimento mensal aproximado | Comparar snapshots de contas, mesas, sessões, participações e tamanho | Depende de histórico de coleta futuro | Mensal | Cenários de dimensionamento, sem extrapolação como certeza |
 
 “Ativo em 30 dias” é definição de medição proposta, sem implementar regra de

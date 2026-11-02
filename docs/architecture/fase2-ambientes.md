@@ -1,6 +1,6 @@
 # Fase 2 — arquitetura e ambientes
 
-Referência: 20/10/2026. Tarefa `86e39wfaq`. Este documento define a arquitetura;
+Referência de estado: 02/11/2026. Tarefa `86e39wfaq`. Este documento define a arquitetura;
 não provisiona serviços nem comprova disponibilidade contínua dos ambientes.
 
 ## Ambientes e estado dos componentes
@@ -12,14 +12,17 @@ não provisiona serviços nem comprova disponibilidade contínua dos ambientes.
 | Banco | PostgreSQL isolado, local ou hospedado | PostgreSQL hospedado no Supabase Free; migration inicial aplicada | MySQL no Railway planejado; migração ainda não aprovada para execução |
 | Prisma 7 | Integrado à API, client gerado no build | Provider PostgreSQL e adapter `PrismaPg` | Exigirá provider, adapter e migrations compatíveis com MySQL |
 | Domínio base | Campaign, Session e OneShot implementados | Requer validação funcional a cada release | Sem declaração de produção autenticada |
+| Participação e feedback | Chamada, elegibilidade, visibilidade, edição e ocultação validadas localmente | Duas migrations e validação funcional pendentes nesta entrega | Sem declaração de produção autenticada |
 | Logging / Request ID | Implementados | Disponíveis no código; exportação/retenção operacional a confirmar | Estratégia de coleta a validar |
 | Autenticação/JWT | Cadastro, revisão inicial e Bearer implementados no código | Exige configurar secrets e aplicar migration de authVersion pelo fluxo autorizado | Deploy autenticado não declarado |
 | Métricas consolidadas | Definidas para coleta | Sem baseline neste repositório | Dimensionamento pendente |
 
 A publicação do MVP é independente da API: a landing atual usa conteúdo estático.
-O schema também modela funcionalidades ainda sem implementação de aplicação,
-como feedbacks, reports, disciplina e audit log. Modelo persistente não significa
-fluxo de produto entregue. O estado da migration em homologação é o registrado
+O código implementa participação/presença e feedback com permissões e auditoria,
+conforme o [contrato desses fluxos](../api/feedbacks-e-presenca.md). A integração
+de audit log também possui [contrato próprio](../api/audit-log.md). Reports e
+disciplina continuam sem endpoints; modelo persistente não significa fluxo de
+produto entregue. O estado da migration inicial em homologação é o registrado
 na [documentação de banco](../database/prisma-postgresql-e-portabilidade-mysql.md),
 não uma nova consulta ao banco nesta revisão.
 

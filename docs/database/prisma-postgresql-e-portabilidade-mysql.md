@@ -55,6 +55,13 @@ O schema atual contém os modelos iniciais da Fase 2 e a migration correspondent
 Novas alterações devem continuar sendo representadas por migrations revisáveis,
 sem substituir o histórico já aplicado.
 
+O histórico também inclui `20261021120000_add_user_auth_version` e duas migrations
+de [feedback e presença](../api/feedbacks-e-presenca.md):
+`20261102120000_add_feedback_target_key` e
+`20261102123000_add_attendance_correction_reason`. As duas últimas foram validadas
+em PostgreSQL 16 local isolado; aplicação em homologação permanece pendente.
+O estado aplicado da migration inicial não comprova a aplicação das posteriores.
+
 ## Fluxo de homologação e produção
 
 Configure `DATABASE_URL` como segredo do ambiente e aplique somente migrations já revisadas e versionadas:

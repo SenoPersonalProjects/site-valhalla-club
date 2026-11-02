@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { ParticipationService } from '../participation/participation.service';
 import { CampaignStatus, SessionStatus } from '../generated/prisma/enums';
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -44,6 +45,7 @@ export class SessionsService {
     private readonly prisma: PrismaService,
     private readonly actors: TableActorsService,
     private readonly rules: TableRulesService,
+    private readonly participation: ParticipationService,
   ) {}
 
   async createForCampaign(
@@ -152,7 +154,12 @@ export class SessionsService {
     });
   }
 
-  async changeStatus(id: string, actorId: string, dto: ChangeSessionStatusDto) {
+  async changeStatus(
+    id: string,
+    actorId: string,
+    dto: ChangeSessionStatusDto,
+    requestId?: string,
+  ) {
     return this.rules.serializable(async (transaction) => {
       const session = await this.getByIdOrThrow(id, transaction);
       await this.actors.assertCanManage(
@@ -203,6 +210,16 @@ export class SessionsService {
         cancellationReason:
           dto.status === SessionStatus.CANCELLED ? cancellationReason : null,
       };
+
+      if (dto.status === SessionStatus.COMPLETED) {
+        await this.participation.complete(
+          transaction,
+          session.id,
+          this.ownerId(session),
+          actorId,
+          requestId,
+        );
+      }
 
       return transaction.session.update({
         where: { id },

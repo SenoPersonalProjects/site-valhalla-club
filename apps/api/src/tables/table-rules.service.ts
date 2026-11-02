@@ -7,6 +7,22 @@ import { badRequest, conflict } from './table-domain.errors';
 export const TABLE_RULE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 export const CLUB_TIME_ZONE = 'America/Maceio';
 
+function isTransactionConflict(error: unknown): boolean {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    return error.code === 'P2034';
+  }
+  // Prisma driver adapters can expose this structured error at commit time,
+  // before the client maps it to P2034. Do not retry based on message text.
+  return (
+    error instanceof Error &&
+    error.name === 'DriverAdapterError' &&
+    typeof error.cause === 'object' &&
+    error.cause !== null &&
+    'kind' in error.cause &&
+    error.cause.kind === 'TransactionWriteConflict'
+  );
+}
+
 const clubClock = new Intl.DateTimeFormat('en-CA', {
   timeZone: CLUB_TIME_ZONE,
   year: 'numeric',
@@ -59,11 +75,7 @@ export class TableRulesService {
           isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
         });
       } catch (error) {
-        if (
-          !(error instanceof Prisma.PrismaClientKnownRequestError) ||
-          error.code !== 'P2034'
-        )
-          throw error;
+        if (!isTransactionConflict(error)) throw error;
         if (attempt === 2) {
           throw conflict(
             'TABLE_CONCURRENT_CHANGE',

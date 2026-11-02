@@ -75,8 +75,9 @@ export class OneShotsController {
     @Param('id') id: string,
     @CurrentUserId() userId: string,
     @Body() dto: ChangeOneShotStatusDto,
+    @CurrentRequestId() requestId: string,
   ) {
-    return this.oneShotsService.changeStatus(id, userId, dto);
+    return this.oneShotsService.changeStatus(id, userId, dto, requestId);
   }
 }
 

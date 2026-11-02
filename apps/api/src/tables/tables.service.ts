@@ -47,7 +47,20 @@ export class TablesService {
       this.prisma.sessionParticipant.findMany({
         where: { userId },
         orderBy: { registeredAt: 'desc' },
-        include: {
+        select: {
+          id: true,
+          sessionId: true,
+          userId: true,
+          role: true,
+          status: true,
+          registeredAt: true,
+          confirmedAt: true,
+          attendedAt: true,
+          cancelledAt: true,
+          cancellationReason: true,
+          leftAt: true,
+          createdAt: true,
+          updatedAt: true,
           session: {
             include: {
               campaign: {

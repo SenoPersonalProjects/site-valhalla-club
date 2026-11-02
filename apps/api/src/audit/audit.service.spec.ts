@@ -1,4 +1,5 @@
 import { AuthorizationService } from '../authorization/authorization.service';
+import { ParticipationService } from '../participation/participation.service';
 import { Prisma } from '../generated/prisma/client';
 import {
   AccountStatus,
@@ -171,7 +172,9 @@ function harness() {
       audit,
     ),
     campaigns: new CampaignsService(prisma, actors, rules, audit),
-    oneShots: new OneShotsService(prisma, actors, rules, audit),
+    oneShots: new OneShotsService(prisma, actors, rules, audit, {
+      complete: jest.fn().mockResolvedValue(undefined),
+    } as unknown as ParticipationService),
     failAudit: () => {
       auditFails = true;
     },
@@ -189,7 +192,7 @@ function harness() {
 }
 
 describe('Persistent administrative audit integration', () => {
-  it('defines exactly seven stable actions and three entity types', () => {
+  it('defines the stable administrative and attendance audit contracts', () => {
     expect(Object.values(AUDIT_ACTION)).toEqual([
       'USER_REGISTRATION_REVIEWED',
       'USER_SYSTEM_ROLE_CHANGED',
@@ -198,11 +201,19 @@ describe('Persistent administrative audit integration', () => {
       'CAMPAIGN_APPROVAL_REVIEWED',
       'ONE_SHOT_APPROVAL_REVIEWED',
       'ONE_SHOT_CORRECTED',
+      'SESSION_PARTICIPANT_ADDED',
+      'SESSION_PARTICIPATION_CANCELLED',
+      'SESSION_ATTENDANCE_RECORDED',
+      'SESSION_COMPLETED',
+      'FEEDBACK_HIDDEN',
     ]);
     expect(Object.values(AUDIT_ENTITY)).toEqual([
       'USER',
       'CAMPAIGN',
       'ONE_SHOT',
+      'SESSION',
+      'SESSION_PARTICIPANT',
+      'FEEDBACK',
     ]);
   });
 

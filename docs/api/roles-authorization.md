@@ -101,9 +101,33 @@ ADMIN/DEV de sistema, conforme a regra administrativa já existente. Um guard
 MASTER indiscriminado nessas rotas impediria esse gerenciamento administrativo.
 Essas decisões continuam nos serviços, via `TableActorsService.assertCanManage`.
 
-As rotas públicas permanecem exatamente GET `/`, GET `/health`,
-GET `/campaigns/public`, GET `/one-shots/public`, POST `/auth/register` e
-POST `/auth/login`.
+As rotas privadas `/sessions/:sessionId/participants`, chamada e cancelamento
+autorizam por recurso via assertCanManage na transação. Correção após COMPLETED
+exige assertAdministrator, inclusive para o mestre responsável. Registrar um
+jogador não concede roles. Ver [participação e presença](feedbacks-e-presenca.md).
+
+`POST /sessions/:sessionId/feedbacks` permite todos os SystemRoles com conta
+APPROVED, mas exige ATTENDED do autor e, para alvo individual, ATTENDED e papel
+correspondente do destinatário na mesma sessão COMPLETED. ADMIN/DEV não bypassa
+participação; ClubRole.PLAYER não substitui presença nem é requisito adicional
+ao vínculo histórico. Autor vem do JWT, nunca do corpo. O serviço relê estado
+e autorização pelo TransactionClient, inclusive em retries.
+
+Consultas pessoais de feedback exigem conta APPROVED e restringem dados ao autor
+ou destinatário, excluindo ocultos. As rotas `/admin/sessions/:sessionId/feedbacks`
+e `/admin/feedbacks/:id` exigem ADMIN/DEV de sistema e permitem moderação de
+registros privados/ocultos. Autorização é relida na transação da consulta.
+
+`PATCH /feedbacks/:id` exige o próprio autor APPROVED e janela original de 24h;
+ADMIN/DEV não pode reescrever avaliações de terceiros. Ocultos ficam bloqueados
+para edição. `PATCH /admin/feedbacks/:id/hide` exige ADMIN/DEV APPROVED, com motivo
+obrigatório e auditoria na mesma transação; ClubRole.ADMIN não autoriza.
+
+As rotas públicas são exatamente GET `/`, GET `/health`,
+GET `/campaigns/public`, GET `/one-shots/public`,
+GET `/sessions/:sessionId/feedbacks/public`, POST `/auth/register` e
+POST `/auth/login`. O feed público de feedback usa projeção mínima e total
+filtrado, independentemente de eventual token enviado.
 
 ## Domínio e transações
 

@@ -1,4 +1,5 @@
 import { AuditService } from '../audit/audit.service';
+import { ParticipationService } from '../participation/participation.service';
 import { Prisma } from '../generated/prisma/client';
 import {
   ApprovalStatus,
@@ -103,9 +104,17 @@ describe('Operational state transaction boundaries', () => {
         clientVersion: '7.10.0',
       });
     });
-    const service = new OneShotsService(h.prisma, h.actors, h.rules, {
-      record: jest.fn().mockResolvedValue(undefined),
-    } as unknown as AuditService);
+    const service = new OneShotsService(
+      h.prisma,
+      h.actors,
+      h.rules,
+      {
+        record: jest.fn().mockResolvedValue(undefined),
+      } as unknown as AuditService,
+      {
+        complete: jest.fn().mockResolvedValue(undefined),
+      } as unknown as ParticipationService,
+    );
     await expect(
       service.create('master-1', {
         gameSystemId: 'system-1',
@@ -129,9 +138,17 @@ describe('Operational state transaction boundaries', () => {
     'reads and validates one-shot state inside the writing transaction for %s',
     async (operation) => {
       const h = harness();
-      const service = new OneShotsService(h.prisma, h.actors, h.rules, {
-        record: jest.fn().mockResolvedValue(undefined),
-      } as unknown as AuditService);
+      const service = new OneShotsService(
+        h.prisma,
+        h.actors,
+        h.rules,
+        {
+          record: jest.fn().mockResolvedValue(undefined),
+        } as unknown as AuditService,
+        {
+          complete: jest.fn().mockResolvedValue(undefined),
+        } as unknown as ParticipationService,
+      );
       if (operation === 'remove')
         h.tx.oneShot.findUnique.mockResolvedValue({
           ...oneShot,
@@ -228,9 +245,17 @@ describe('Operational state transaction boundaries', () => {
       const campaigns = new CampaignsService(h.prisma, h.actors, h.rules, {
         record: jest.fn().mockResolvedValue(undefined),
       } as unknown as AuditService);
-      const oneShots = new OneShotsService(h.prisma, h.actors, h.rules, {
-        record: jest.fn().mockResolvedValue(undefined),
-      } as unknown as AuditService);
+      const oneShots = new OneShotsService(
+        h.prisma,
+        h.actors,
+        h.rules,
+        {
+          record: jest.fn().mockResolvedValue(undefined),
+        } as unknown as AuditService,
+        {
+          complete: jest.fn().mockResolvedValue(undefined),
+        } as unknown as ParticipationService,
+      );
       const result =
         operation === 'campaign-review'
           ? campaigns.review('campaign-1', 'admin-1', {
@@ -270,6 +295,9 @@ describe('Operational state transaction boundaries', () => {
       {
         record: jest.fn().mockResolvedValue(undefined),
       } as unknown as AuditService,
+      {
+        complete: jest.fn().mockResolvedValue(undefined),
+      } as unknown as ParticipationService,
     );
     await service.correct('one-shot-1', 'admin-1', {
       scheduledAt: new Date(Date.now() + 86_400_000).toISOString(),
@@ -315,9 +343,17 @@ describe('Operational state transaction boundaries', () => {
 
   it('does not complete a session using a date read before concurrent correction', async () => {
     const h = harness();
-    const service = new OneShotsService(h.prisma, h.actors, h.rules, {
-      record: jest.fn().mockResolvedValue(undefined),
-    } as unknown as AuditService);
+    const service = new OneShotsService(
+      h.prisma,
+      h.actors,
+      h.rules,
+      {
+        record: jest.fn().mockResolvedValue(undefined),
+      } as unknown as AuditService,
+      {
+        complete: jest.fn().mockResolvedValue(undefined),
+      } as unknown as ParticipationService,
+    );
     h.transaction.mockImplementationOnce(async (operation) => {
       await operation(h.tx as unknown as Prisma.TransactionClient);
       h.tx.oneShot.findUnique.mockResolvedValue({

@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { ParticipationService } from '../participation/participation.service';
 import { AuditService } from '../audit/audit.service';
 import { AUDIT_ACTION, AUDIT_ENTITY } from '../audit/audit.constants';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
@@ -59,6 +60,7 @@ export class OneShotsService {
     private readonly actors: TableActorsService,
     private readonly rules: TableRulesService,
     private readonly audit: AuditService,
+    private readonly participation: ParticipationService,
   ) {}
 
   async create(actorId: string, dto: CreateOneShotDto) {
@@ -358,7 +360,12 @@ export class OneShotsService {
     });
   }
 
-  async changeStatus(id: string, actorId: string, dto: ChangeOneShotStatusDto) {
+  async changeStatus(
+    id: string,
+    actorId: string,
+    dto: ChangeOneShotStatusDto,
+    requestId?: string,
+  ) {
     return this.rules.serializable(async (transaction) => {
       const oneShot = await this.getByIdOrThrow(id, transaction);
       await this.actors.assertCanManage(oneShot.masterId, actorId, transaction);
@@ -409,6 +416,16 @@ export class OneShotsService {
         dto.status === OneShotStatus.CANCELLED
           ? SessionStatus.CANCELLED
           : SessionStatus.COMPLETED;
+
+      if (sessionStatus === SessionStatus.COMPLETED) {
+        await this.participation.complete(
+          transaction,
+          oneShot.session.id,
+          oneShot.masterId,
+          actorId,
+          requestId,
+        );
+      }
 
       await transaction.session.update({
         where: { id: oneShot.session!.id },

@@ -17,7 +17,8 @@ Os guards reutilizáveis e a separação SystemRole/ClubRole estão documentados
 | PATCH | `/admin/users/:id/registration-review` | ADMIN/DEV de sistema APPROVED; revisão inicial |
 
 Também são deliberadamente públicos `GET /`, `GET /health`,
-`GET /campaigns/public` e `GET /one-shots/public`. Todas as demais rotas atuais
+`GET /campaigns/public`, `GET /one-shots/public` e
+`GET /sessions/:sessionId/feedbacks/public`. Todas as demais rotas atuais
 são privadas por guard global; não dependem da presença de `@CurrentUserId`.
 
 Registro exige `email`, `password`, `displayName`, `whatsappNumber`, `birthDate`.

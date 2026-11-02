@@ -98,10 +98,14 @@ da Fase 2 e migration inicial versionada e aplicada em homologação. Logging
 estruturado/Request ID e domínio base de Campaign, Session e OneShot estão
 implementados. Consulte [a documentação de banco](database/prisma-postgresql-e-portabilidade-mysql.md).
 
-A nova migration `20261021120000_add_user_auth_version` adiciona somente o contador
-de invalidação de JWT. Foi criada/revisada sem aplicação ao banco nesta tarefa;
-é necessário aplicá-la pelo fluxo autorizado antes de executar esta versão.
-Não foi executado `migrate dev`, pois não se comprovou conexão local/isolada.
+Além da migration inicial, o histórico inclui
+`20261021120000_add_user_auth_version` para invalidação de JWT e as migrations
+`20261102120000_add_feedback_target_key` e
+`20261102123000_add_attendance_correction_reason` para
+[feedback e presença](api/feedbacks-e-presenca.md). O banco usado ao executar a
+API precisa ter o histórico correspondente aplicado. As duas últimas foram
+verificadas em PostgreSQL local isolado; aplicação em homologação permanece
+pendente nesta entrega.
 
 Para novas alterações de modelo aprovadas, o fluxo local usa exclusivamente
 um banco de desenvolvimento:
@@ -131,7 +135,10 @@ Nunca execute `prisma:migrate:dev` com a URL de homologação. O ambiente ou job
 Os scripts existentes incluem `npm run lint`, `npm run test`, `npm run test:e2e` e `npm run build`. O script de lint da API contém `--fix`; não o execute em uma auditoria ou revisão sem autorização para escrita.
 
 Os E2E atuais substituem Prisma por mock e não comprovam integração real com
-PostgreSQL ou MySQL. Para critérios de capacidade, consultar
+PostgreSQL ou MySQL. Feedback e presença também tiveram verificações separadas
+com PostgreSQL local isolado, registradas no contrato da funcionalidade;
+isso não substitui a homologação. Execute build, testes e E2E em sequência,
+pois seus scripts preparam o mesmo Prisma Client gerado. Para critérios de capacidade, consultar
 [métricas](observability/metricas-capacidade-fase2.md).
 
 ## Segurança de configuração

@@ -346,7 +346,7 @@ describe('Authentication with real Bearer JWT (e2e)', () => {
     whatsappNumber: '+55 (82) 99999-9999',
     birthDate: '1990-01-01',
   });
-  it('has exactly the six deliberate public routes across every loaded controller', () => {
+  it('has only the deliberate public routes across every loaded controller', () => {
     const publicRoutes: string[] = [];
     const reflector = app.get(Reflector);
     for (const module of app.get(ModulesContainer).values()) {
@@ -380,6 +380,7 @@ describe('Authentication with real Bearer JWT (e2e)', () => {
         'GET /health',
         'GET /campaigns/public',
         'GET /one-shots/public',
+        'GET /sessions/:sessionId/feedbacks/public',
         'POST /auth/register',
         'POST /auth/login',
       ].sort(),

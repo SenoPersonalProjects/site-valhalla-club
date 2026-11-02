@@ -23,6 +23,7 @@ import { StructuredLoggerService } from './observability/structured-logger.servi
 import { PrismaModule } from './prisma/prisma.module';
 import { SessionsModule } from './sessions/sessions.module';
 import { TablesModule } from './tables/tables.module';
+import { FeedbacksModule } from './feedbacks/feedbacks.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { TablesModule } from './tables/tables.module';
     CampaignsModule,
     SessionsModule,
     OneShotsModule,
+    FeedbacksModule,
   ],
   controllers: [AppController],
   providers: [
