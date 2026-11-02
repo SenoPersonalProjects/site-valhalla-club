@@ -1,4 +1,5 @@
 import { AuditService } from '../audit/audit.service';
+import { ParticipationService } from '../participation/participation.service';
 import {
   ApprovalStatus,
   OneShotStatus,
@@ -45,6 +46,9 @@ describe('OneShotsService', () => {
     {
       record: jest.fn().mockResolvedValue(undefined),
     } as unknown as AuditService,
+    {
+      complete: jest.fn().mockResolvedValue(undefined),
+    } as unknown as ParticipationService,
   );
 
   const futureDate = new Date(Date.now() + 86_400_000);

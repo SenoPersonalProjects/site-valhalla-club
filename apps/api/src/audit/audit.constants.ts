@@ -3,6 +3,7 @@ import {
   ApprovalStatus,
   ClubRole,
   SystemRole,
+  SessionParticipantStatus,
 } from '../generated/prisma/enums';
 
 export const AUDIT_ACTION = {
@@ -13,12 +14,20 @@ export const AUDIT_ACTION = {
   CAMPAIGN_APPROVAL_REVIEWED: 'CAMPAIGN_APPROVAL_REVIEWED',
   ONE_SHOT_APPROVAL_REVIEWED: 'ONE_SHOT_APPROVAL_REVIEWED',
   ONE_SHOT_CORRECTED: 'ONE_SHOT_CORRECTED',
+  SESSION_PARTICIPANT_ADDED: 'SESSION_PARTICIPANT_ADDED',
+  SESSION_PARTICIPATION_CANCELLED: 'SESSION_PARTICIPATION_CANCELLED',
+  SESSION_ATTENDANCE_RECORDED: 'SESSION_ATTENDANCE_RECORDED',
+  SESSION_COMPLETED: 'SESSION_COMPLETED',
+  FEEDBACK_HIDDEN: 'FEEDBACK_HIDDEN',
 } as const;
 
 export const AUDIT_ENTITY = {
   USER: 'USER',
   CAMPAIGN: 'CAMPAIGN',
   ONE_SHOT: 'ONE_SHOT',
+  SESSION: 'SESSION',
+  SESSION_PARTICIPANT: 'SESSION_PARTICIPANT',
+  FEEDBACK: 'FEEDBACK',
 } as const;
 
 type ReviewMetadata = {
@@ -28,6 +37,32 @@ type ReviewMetadata = {
 };
 type RoleMetadata = { changed: boolean; role: ClubRole };
 type AuditEvents = {
+  FEEDBACK_HIDDEN: {
+    entityType: 'FEEDBACK';
+    metadata: { changed: boolean; sessionId: string };
+  };
+  SESSION_PARTICIPANT_ADDED: {
+    entityType: 'SESSION_PARTICIPANT';
+    metadata: { changed: boolean; sessionId: string };
+  };
+  SESSION_PARTICIPATION_CANCELLED: {
+    entityType: 'SESSION_PARTICIPANT';
+    metadata: { changed: boolean; sessionId: string };
+  };
+  SESSION_ATTENDANCE_RECORDED: {
+    entityType: 'SESSION_PARTICIPANT';
+    metadata: {
+      changed: boolean;
+      sessionId: string;
+      fromStatus: SessionParticipantStatus;
+      toStatus: SessionParticipantStatus;
+      correction: boolean;
+    };
+  };
+  SESSION_COMPLETED: {
+    entityType: 'SESSION';
+    metadata: { attendedPlayers: number; absentPlayers: number };
+  };
   USER_REGISTRATION_REVIEWED: {
     entityType: 'USER';
     metadata: {

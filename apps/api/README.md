@@ -82,12 +82,15 @@ Não depende de cron do sistema operacional.
 
 Reconciliação e mutações de Session de Campaign usam transações Serializable;
 conflitos repetem a operação completa com nova leitura de estado/predicado.
+O helper trata P2034 e o conflito estruturado de commit do adapter
+DriverAdapterError/TransactionWriteConflict, com o mesmo limite de três
+tentativas; outros erros não recebem retry por semelhança de mensagem.
 Não há auto-reativação: se a reconciliação serializar primeiro, uma sessão pode
 ser adicionada/remarcada na Campaign INACTIVE, como já permitido; reativá-la
 exige publicação explícita, aprovação e quota. Não há escrita artificial em
 `Campaign.updatedAt` para coordenar essas operações.
 
-As regras permanecem em NestJS/Prisma, sem mudança de schema/migrations ou SQL
+As regras de quotas e inatividade acima permanecem em NestJS/Prisma, sem mudança de schema/migrations ou SQL
 específico. Testes de concorrência usam doubles de transações; a validação de
 isolamento e desempenho em PostgreSQL/MySQL reais continua sendo revisão de
 integração antes de produção, sem criar banco real nesta tarefa.
@@ -105,12 +108,28 @@ são fundação do domínio. Detalhes canônicos:
 [métricas, capacidade e logs seguros](../../docs/observability/metricas-capacidade-fase2.md)
 e [dados pessoais e acesso](../../docs/privacy/lgpd-fase2.md).
 
-O [audit log administrativo](../../docs/api/audit-log.md) persiste as sete ações
-administrativas explícitas na mesma transação, inclusive no-ops, e oferece
+O [audit log administrativo](../../docs/api/audit-log.md) persiste ações
+administrativas e eventos explícitos de presença na mesma transação,
+inclusive no-ops quando previstos, e oferece
 consulta paginada read-only em `GET /admin/audit-logs` para ADMIN/DEV aprovados.
 Não substitui observabilidade nem registra leituras, auth ou ações do titular.
-Participação, feedback e disciplina têm modelos no schema; seus fluxos completos
-não estão implementados por esta documentação.
+A [participação e chamada](../../docs/api/feedbacks-e-presenca.md) implementa
+inclusão gerenciada, listagem privada paginada, presença/ausência, cancelamento
+e correção administrativa. Conclusão de campanhas e one-shots exige chamada
+completa e registra o mestre como presente atomicamente. Não há autoinscrição,
+interface de chamada ou substituição de mestre por sessão.
+
+O envio de feedback de sessão, mestre e jogador está implementado em
+`POST /sessions/:sessionId/feedbacks`. Exige autor APPROVED/ATTENDED, sessão
+COMPLETED, destinatário compatível, nota inteira 0–10 e visibilidade válida.
+Mantém unicidade no banco e registra prazo de edição de 24 horas. Consultas
+públicas mínimas, pessoais (enviados/recebidos) e administrativas estão
+implementadas, com paginação e isolamento de feedbacks privados/ocultos.
+Edição pelo autor em `PATCH /feedbacks/:id` respeita as 24h originais.
+Ocultação em `PATCH /admin/feedbacks/:id/hide` exige ADMIN/DEV e motivo,
+preserva histórico e grava auditoria atômica. Não há restauração ou exclusão;
+disciplina continua sem endpoints. Contrato, exemplos e erros estão no guia de
+feedbacks/presença acima.
 
 ## Scripts
 
@@ -148,9 +167,17 @@ futura produção. Rotação por configuração, sem alteração de código.
 ## Migrations
 
 `20261021120000_add_user_auth_version` acrescenta somente `User.authVersion`
-com default 0. A migration inicial permanece intacta. Nesta implementação nenhuma
-migration foi aplicada: valide/revise e aplique pelo fluxo autorizado do ambiente
+com default 0. A migration inicial permanece intacta. Valide/revise o histórico
+necessário e aplique pelo fluxo autorizado do ambiente
 antes de executar a API. O histórico PostgreSQL não deve ser aplicado no MySQL.
+
+A branch de feedback/presença adiciona `20261102120000_add_feedback_target_key`
+e `20261102123000_add_attendance_correction_reason`. Elas foram aplicadas apenas
+em PostgreSQL descartável de desenvolvimento, com dados sintéticos; a aplicação
+em homologação permanece pendente de revisão e execução autorizada. O primeiro
+backfill aborta diante de alvos inconsistentes ou feedbacks duplicados, sem
+apagar registros. Não use `migrate dev` ou reset para resolver isso em banco
+compartilhado. Detalhes e evidências no contrato de feedbacks/presença.
 
 - Desenvolvimento: `npm run prisma:migrate:dev -- --name nome_da_migration`.
 - Homologação e produção: `npm run prisma:migrate:deploy`.

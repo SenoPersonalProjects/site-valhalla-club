@@ -84,6 +84,58 @@ describe('TableRulesService', () => {
       code: 'P2034',
       clientVersion: '7.10.0',
     });
+  const adapterConflict = () => {
+    const error = new Error('TransactionWriteConflict', {
+      cause: { kind: 'TransactionWriteConflict' },
+    });
+    error.name = 'DriverAdapterError';
+    return error;
+  };
+
+  it('retries an adapter commit conflict with a fresh transaction', async () => {
+    const first = {},
+      second = {};
+    const operation = jest.fn().mockResolvedValue('ok');
+    transaction.mockImplementationOnce(
+      async (callback: (tx: unknown) => Promise<unknown>) => {
+        await callback(first);
+        throw adapterConflict();
+      },
+    );
+    transaction.mockImplementationOnce(
+      (callback: (tx: unknown) => Promise<unknown>) => callback(second),
+    );
+    await expect(rules.serializable(operation)).resolves.toBe('ok');
+    expect(operation.mock.calls).toEqual([[first], [second]]);
+    expect(transaction).toHaveBeenCalledTimes(2);
+  });
+
+  it('bounds structured adapter conflicts to three attempts', async () => {
+    transaction.mockRejectedValue(adapterConflict());
+    await expect(rules.serializable(jest.fn())).rejects.toMatchObject({
+      status: 409,
+      response: { code: 'TABLE_CONCURRENT_CHANGE' },
+    });
+    expect(transaction).toHaveBeenCalledTimes(3);
+  });
+
+  it.each([
+    new Error('TransactionWriteConflict'),
+    new Error('other', { cause: { kind: 'TransactionWriteConflict' } }),
+    Object.assign(new Error('other', { cause: { kind: 'ConnectionError' } }), {
+      name: 'DriverAdapterError',
+    }),
+    Object.assign(new Error('other', { cause: null }), {
+      name: 'DriverAdapterError',
+    }),
+  ])(
+    'does not retry unrelated or message-only adapter errors: %s',
+    async (error) => {
+      transaction.mockRejectedValue(error);
+      await expect(rules.serializable(jest.fn())).rejects.toBe(error);
+      expect(transaction).toHaveBeenCalledTimes(1);
+    },
+  );
   it('retries the whole transaction with a fresh client after P2034', async () => {
     const first = {},
       second = {};

@@ -4,7 +4,7 @@
 
 MVP institucional publicado na **Vercel**, em
 [clubevalhalla.vercel.app](https://clubevalhalla.vercel.app/).
-Atualização de estado: 20/10/2026. O escopo abaixo preserva a entrega histórica
+Atualização de estado: 02/11/2026. O escopo abaixo preserva a entrega histórica
 do MVP; a Fase 2 é uma etapa distinta em desenvolvimento/homologação.
 
 ## Escopo entregue
@@ -38,10 +38,15 @@ do MVP; a Fase 2 é uma etapa distinta em desenvolvimento/homologação.
 - administração e audit log;
 - homologação dos fluxos e critérios de capacidade/privacidade.
 
-Já implementados: Prisma 7 integrado, schema/migration inicial (aplicada em
-homologação), logging estruturado com Request ID e domínio base de Campaign,
-Session e OneShot. Auth/JWT não está implementada. Perfil, participação, feedback,
-disciplina e audit log possuem modelagem, sem comprovar seus fluxos de aplicação.
+Já implementados no código: Prisma 7, logging estruturado com Request ID,
+autenticação/JWT, autorização, perfil, administração técnica de usuários,
+audit log e domínio de Campaign, Session e OneShot. O schema e a migration
+inicial da Fase 2 foram aplicados em homologação.
+
+[Participação, chamada e feedback](api/feedbacks-e-presenca.md) estão implementados
+e validados localmente na API. As duas migrations dessa entrega, a homologação
+dos fluxos e sua interface permanecem pendentes. Reports, advertências, sanções
+e recursos continuam modelados sem endpoints de aplicação.
 
 Ambiente de homologação: Vercel / Render Free / Supabase Free (PostgreSQL).
 Railway com API NestJS e MySQL é planejamento condicionado à validação, não

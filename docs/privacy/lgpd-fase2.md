@@ -13,11 +13,14 @@ legal específico.
 Prisma, schema/migration inicial e domínio base de mesas existem. Cadastro,
 revisão inicial e JWT estão implementados no [contrato de auth](../api/auth.md).
 Edição do próprio nome/WhatsApp e solicitação DELETION_PENDING estão implementadas
-no [contrato de conta](../api/account-lifecycle.md). Recuperação segura,
-anonimização definitiva, feedback, disciplina e audit log não devem ser
-considerados implementados apenas porque seus modelos existem.
-As regras abaixo orientam a implementação e seus testes futuros; esta tarefa
-não cria endpoints nem jobs de retenção.
+no [contrato de conta](../api/account-lifecycle.md). Participação/presença e
+feedback estão implementados e validados localmente no
+[contrato de feedbacks](../api/feedbacks-e-presenca.md); a auditoria persistente
+está descrita no [contrato de audit log](../api/audit-log.md).
+Recuperação segura, anonimização definitiva e disciplina não devem ser
+consideradas implementadas apenas porque seus modelos existem. Esta especificação
+descreve os limites de acesso implementados e os critérios dos fluxos futuros;
+não implementa jobs de retenção nem declara homologação das novas funcionalidades.
 
 - Menores de 18 anos ficam fora da primeira versão autenticada; a futura entrada
   deve validar elegibilidade, sem coletar documentos para isso por padrão.
@@ -47,15 +50,37 @@ podem permitir vinculação a pessoas e não equivalem a anonimização.
 | `Profile`: `displayName`, `whatsappNumber`, `birthDate`, `userId`, IDs e timestamps | Nome comunitário, identificação no WhatsApp e elegibilidade etária; nome pode ser público na projeção de mesa; número/data são privados | Número normalizado E.164; data tratada conforme contrato do schema; titular e ADMIN/DEV autorizados; mestres não recebem contatos/datas automaticamente | Remover número e data; remover/substituir nome por rótulo neutro quando necessário ao histórico; eliminar metadados dispensáveis |
 | `Campaign`, `OneShot`, `Session`: título, descrição, sistema, agenda, status, mestre, revisão, cancelamento e timestamps | Organização das atividades; conteúdo publicado público; rascunhos privados; revisão/motivos administrativos | Público só recebe projeção segura do domínio; dono e administração gerenciam; não inserir contatos/dados disciplinares em descrição/título | Preservar relações necessárias a sessões/participações/casos; remover dados pessoais de texto livre e desassociar identificação pública do titular quando aplicável; não apagar em cascata histórico necessário |
 | `SessionParticipant`: usuário/sessão, papel, status, `registeredAt`, `confirmedAt`, `attendedAt`, `cancelledAt`, motivo, `leftAt`, timestamps | Inscrição e presença; privado/operacional | Titular; mestre apenas das sessões sob sua responsabilidade e administração, no mínimo necessário; lista de participantes não se torna pública por padrão | Remover motivo/texto pessoal dispensável; preservar vínculo técnico mínimo ou agregados quando necessário ao histórico da sessão |
-| `Feedback`: autor, alvo, sessão, `rating`, `comment`, `visibility`, `editableUntil`, ocultação/moderação e timestamps | Avaliação e moderação; público somente se `PUBLIC` e não oculto; privado se `PRIVATE_TO_RECIPIENT`; moderação administrativa | Autor/destinatário e moderação conforme finalidade; não expor identificação ou notas internas em projeção pública; endpoints ainda pendentes | Revisar comentários para dados de terceiros; remover/anonimizar autoria e texto pessoal quando cabível, preservar avaliação agregada/histórico mínimo justificado |
+| `Feedback`: autor, alvo, sessão, chave interna `targetKey`, `rating`, `comment`, `visibility`, `editableUntil`, ocultação/moderação e timestamps | Avaliação e moderação; público somente se `PUBLIC` e não oculto; privado se `PRIVATE_TO_RECIPIENT`; moderação administrativa | Criação, consultas, edição pelo autor por 24h e ocultação ADMIN/DEV implementadas; público mínimo e rotas pessoais/administrativas separadas; sem chave interna ou perfis nas respostas | Revisar comentários para dados de terceiros; remover/anonimizar autoria e texto pessoal quando cabível, preservar avaliação agregada/histórico mínimo justificado |
 | `Report`: autor, alvo, sessão, categoria, `description`, status, revisão/resolução, `disclosedById`, `disclosedAt` e timestamps | Apuração e decisão de moderação; administrativo e acesso privado controlado do autor | ADMIN/DEV aprovados no exercício da função; autor acompanha somente retorno autorizado; alvo não recebe relato/autoria/evidências automaticamente; divulgação exige decisão controlada | Preservar integridade do caso e suas relações quando necessário; reduzir identificadores/texto pessoal sem destruir evidência que ainda precise ser conservada; reavaliar necessidade |
 | `ReportEvidence`: `reportId`, `url`, `label`, `createdAt` | Subsídio à apuração; administrativo | Acesso restrito ao caso, nunca URL pública por padrão; não coletar material alheio ao fato; schema de URL não garante proteção do conteúdo externo | Eliminar links/cópias e solicitar tratamento na origem sob controle do clube quando dispensáveis; manter somente material justificado; tratar backups/exportações |
 | `Warning`: usuário/report/categoria, gravidade, pesos, recorrência, status, motivo, vencimento, criador, reversão e timestamps | Advertência e memória da decisão; administrativo | Administração autorizada; titular recebe decisão pertinente sem material de terceiros; expiração não equivale a apagar histórico | Preservar relações/cálculo necessários à revisão; minimizar identificação e motivos textuais quando possível; sem prazo legal presumido |
 | `Sanction`: usuário, report/warning, tipo, escopo de campanha/sessão/outro, motivo, início/fim, status, criador/reversor e timestamps | Aplicação e revisão de restrições; administrativo | Administração; titular recebe decisão/escopo pertinente; mestre recebe somente restrição operacional estritamente necessária, sem dossiê | Conservar histórico necessário e vínculos íntegros; remover identificadores/texto pessoal dispensável; revisar necessidade após encerramento |
 | `Appeal`: usuário, warning/sanction, sequência, justificativa, status, revisor, resposta e timestamps | Recurso e revisão da decisão; privado/administrativo | Titular do recurso e administração autorizada; ocultar informações de terceiros | Preservar sequência e decisão enquanto necessárias; revisar justificativas/respostas para minimização e anonimização |
-| `AuditLog`: `actorId`, `action`, `entityType`, `entityId`, `requestId`, `metadata`, `createdAt` | Rastreabilidade administrativa futura; administrativo | Somente operadores autorizados, sem endpoint público; metadata mínima e sem cópia de conteúdo sensível | Remover/minimizar ator e correlações pessoais quando possível sem invalidar histórico necessário; não tratar pseudônimo/ID como anonimização completa |
+| `AuditLog`: `actorId`, `action`, `entityType`, `entityId`, `requestId`, `metadata`, `createdAt` | Rastreabilidade administrativa implementada; administrativo | Consulta ADMIN/DEV aprovada e eventos explícitos de mutação; sem endpoint público, metadata mínima e sem cópia de conteúdo sensível | Remover/minimizar ator e correlações pessoais quando possível sem invalidar histórico necessário; não tratar pseudônimo/ID como anonimização completa |
 | `GameSystem`, `DisciplinaryCategory` | Catálogos de sistema e classificação; não são perfis pessoais | Sistemas ativos podem ser públicos; categorias disciplinares não exigem exposição pública | Preservar referências usadas pelo histórico; não inserir nomes/relatos pessoais nos rótulos |
 | Logs operacionais e relatórios de capacidade | Diagnóstico e dimensionamento; administrativo | Request ID e agregados; sem payloads/segredos; paths podem conter IDs pessoais | Definir retenção operacional antes de exportar; limitar acesso e apagar cópias dispensáveis; não prolongar conservação só por conveniência |
+
+O [fluxo de participação/presença](../api/feedbacks-e-presenca.md) implementa
+chamada privada e acrescenta `SessionParticipant.attendanceCorrectionReason`:
+último motivo administrativo de correção, persistido somente na participação.
+Não é selecionado na chamada ou em `/tables/me`, nem copiado para auditoria/logs.
+Autoria, mudança de estado e data da ação ficam na auditoria mínima; o campo
+de motivo não equivale a um histórico completo de justificativas. Não há
+endpoint novo de consulta de motivos administrativos nesta entrega.
+
+A etapa de envio de feedback está implementada: autentica e relê elegibilidade
+na transação, seleciona somente o necessário à resposta do próprio autor e não
+busca perfil/contato do destinatário. Comentário não entra em logs ou metadata.
+Essa resposta não é um feed público. As consultas estão implementadas com
+projeção pública mínima, escopo pessoal de autor/destinatário e rotas ADMIN/DEV
+para registros privados/ocultos. Não expõem perfis nem chave interna; campos de
+moderação aparecem somente nas respostas administrativas. Totais respeitam o
+mesmo filtro dos itens. Edição é exclusiva do autor aprovado nas 24h originais,
+sem prorrogação. Ocultação exige ADMIN/DEV, preserva o registro e sua primeira
+decisão e gera auditoria atômica; motivo não entra em metadata ou logs. Ocultos
+saem das consultas públicas/pessoais e não podem ser editados pelo autor.
+Não há histórico de versões antigas do comentário, restauração ou exclusão
+de feedback nesta entrega; ocultar não constitui eliminação/anonimização.
 
 Projeções públicas atuais de mesas não incluem `master.id`, reports,
 sanctionScopes, evidências ou campos administrativos. Contrato canônico:
@@ -76,7 +101,7 @@ com finalidade e minimização; isso não autoriza publicar dados pessoais.
 | Hash de senha / secrets | Não | Não via resposta | Não via resposta administrativa | Somente processamento pelo serviço autorizado |
 | Status/papéis e revisão de conta | Não | Estado próprio e informação pertinente | Sim, conforme função | Notas/terceiros protegidos |
 | Rascunhos e participação/presença | Não por padrão | Próprios vínculos | Sim, conforme função | Mestre acessa somente operação necessária das próprias mesas |
-| Feedback público não oculto | Projeção mínima futura | Conforme autoria/alvo | Moderação | PRIVATE_TO_RECIPIENT e notas internas excluídos |
+| Feedback público não oculto | Projeção mínima implementada para mesas aprovadas elegíveis | Conforme autoria/alvo | Consulta para moderação | PRIVATE_TO_RECIPIENT e notas internas excluídos |
 | Feedback privado | Não | Autor/destinatário autorizados | Moderação justificada | Não expor para os demais participantes |
 | Report | Não | Autor: acompanhamento controlado | Apuração autorizada | Ser alvo não concede acesso integral |
 | Evidência | Não | Somente acesso especificamente autorizado | Apuração autorizada | Não revelar material de terceiros automaticamente |

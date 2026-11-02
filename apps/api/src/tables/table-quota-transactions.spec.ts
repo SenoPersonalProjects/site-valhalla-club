@@ -1,4 +1,5 @@
 import { AuditService } from '../audit/audit.service';
+import { ParticipationService } from '../participation/participation.service';
 import { Prisma } from '../generated/prisma/client';
 import { ApprovalStatus, CampaignStatus } from '../generated/prisma/enums';
 import { CampaignsService } from '../campaigns/campaigns.service';
@@ -41,13 +42,11 @@ describe('Quota transaction boundaries', () => {
           attempts.push({ count, write });
           const tx = {
             campaign: {
-              findUnique: jest
-                .fn()
-                .mockResolvedValue({
-                  masterId: 'master-1',
-                  status: CampaignStatus.DRAFT,
-                  approvalStatus: ApprovalStatus.APPROVED,
-                }),
+              findUnique: jest.fn().mockResolvedValue({
+                masterId: 'master-1',
+                status: CampaignStatus.DRAFT,
+                approvalStatus: ApprovalStatus.APPROVED,
+              }),
               count,
               update: write,
             },
@@ -74,9 +73,17 @@ describe('Quota transaction boundaries', () => {
       const campaigns = new CampaignsService(prisma, actors, rules, {
         record: jest.fn().mockResolvedValue(undefined),
       } as unknown as AuditService);
-      const oneShots = new OneShotsService(prisma, actors, rules, {
-        record: jest.fn().mockResolvedValue(undefined),
-      } as unknown as AuditService);
+      const oneShots = new OneShotsService(
+        prisma,
+        actors,
+        rules,
+        {
+          record: jest.fn().mockResolvedValue(undefined),
+        } as unknown as AuditService,
+        {
+          complete: jest.fn().mockResolvedValue(undefined),
+        } as unknown as ParticipationService,
+      );
       const publish = (id: string) =>
         kind === 'campaign'
           ? campaigns.publish(id, 'master-1')

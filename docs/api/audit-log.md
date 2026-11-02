@@ -1,8 +1,11 @@
 # Audit log administrativo
 
 Task `86e39wk05`. Trilha persistente de ações administrativas explícitas,
-distinta dos logs técnicos, requests e observabilidade. Usa o model e a tabela
-AuditLog existentes, sem schema/migration ou dependência nova.
+distinta dos logs técnicos, requests e observabilidade. O contrato foi ampliado
+para participação/presença, conclusão de sessões e ocultação de feedback. Usa o model e a tabela
+AuditLog existentes, sem alteração estrutural de AuditLog ou dependência nova.
+A ampliação de presença adiciona um motivo privado em SessionParticipant,
+conforme o contrato específico; nenhum texto livre novo entra em metadata.
 
 ## Consulta
 
@@ -20,7 +23,8 @@ createdAt desc, id desc. Itens/total/autorização usam o mesmo snapshot
 RepeatableRead. Offset fora do intervalo suportado retorna 400 BAD_REQUEST.
 Requests separados não congelam páginas contra novas inserções.
 
-Filtros opcionais exatos: actorId, entityType (USER/CAMPAIGN/ONE_SHOT), entityId
+Filtros opcionais exatos: actorId, entityType
+(USER/CAMPAIGN/ONE_SHOT/SESSION/SESSION_PARTICIPANT/FEEDBACK), entityId
 e requestId. entityId exige entityType. IDs são strings não vazias até 128
 caracteres; requestId segue o padrão seguro do middleware. Não há contains,
 busca textual/JSON/PII ou intervalo de datas. Filtros/campos extras inválidos
@@ -40,6 +44,18 @@ Constantes TypeScript, sem enum Prisma. entityId é o ID técnico afetado.
 | CAMPAIGN_APPROVAL_REVIEWED | CAMPAIGN | changed, fromApprovalStatus, toApprovalStatus |
 | ONE_SHOT_APPROVAL_REVIEWED | ONE_SHOT | changed, fromApprovalStatus, toApprovalStatus |
 | ONE_SHOT_CORRECTED | ONE_SHOT | changed, fields |
+| SESSION_PARTICIPANT_ADDED | SESSION_PARTICIPANT | changed, sessionId |
+| SESSION_PARTICIPATION_CANCELLED | SESSION_PARTICIPANT | changed, sessionId |
+| SESSION_ATTENDANCE_RECORDED | SESSION_PARTICIPANT | changed, sessionId, fromStatus, toStatus, correction |
+| SESSION_COMPLETED | SESSION | attendedPlayers, absentPlayers |
+| FEEDBACK_HIDDEN | FEEDBACK | changed, sessionId |
+
+Os quatro eventos de presença pertencem à ampliação do
+[contrato de feedbacks e presença](feedbacks-e-presenca.md). Usam o mesmo
+TransactionClient da alteração, inclusive para ações do mestre. Motivos ficam
+nos campos privados da participação, nunca em metadata. Repetições de chamada
+ou cancelamento geram changed:false sem substituir timestamps/justificativas.
+Conclusão repetida permanece conflito de estado e não gera evento de sucesso.
 
 Cada request administrativo autorizado concluído com sucesso gera exatamente
 um evento, inclusive no-op (changed:false). Erros/negações/rollback não deixam
@@ -102,10 +118,20 @@ descrição, evidências, IP, headers, stack, SQL ou constraint. Sanitização d
 logger não substitui minimização persistente. IDs vinculáveis continuam sendo
 dados restritos; não constituem anonimização jurídica.
 
+Ocultação de feedback é feita por ADMIN/DEV na mesma transação Serializable
+do evento FEEDBACK_HIDDEN. A primeira decisão registra changed:true; repetições
+preservam a primeira atribuição, motivo e data e registram changed:false.
+Motivo é armazenado somente em Feedback.moderationReason, retornado apenas em
+rotas administrativas. Comentário e motivo não são copiados para metadata.
+Editar feedback como autor não gera evento administrativo. Não há endpoint
+de restauração ou exclusão de feedback nesta entrega.
+
 ## Limites
 
-Não audita leituras, register/login/logout, perfil/exclusão do titular, ações
-normais de MASTER, publicação/status comuns ou falhas HTTP. Não implementa
+Não audita leituras, register/login/logout, perfil/exclusão do titular,
+publicação, status comuns fora da conclusão de sessão ou falhas HTTP. Ações
+de MASTER são auditadas nos fluxos explícitos de participação/presença/conclusão.
+Não implementa
 disciplina, dashboard, exportação, alertas, métricas, retenção automática ou SIEM.
 Observabilidade continua independente, sem receber payload de auditoria.
 Retenção/descarte dependem de aprovação conforme [LGPD](../privacy/lgpd-fase2.md).

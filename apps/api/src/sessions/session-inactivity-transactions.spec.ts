@@ -1,4 +1,5 @@
 import { AuthorizationService } from '../authorization/authorization.service';
+import { ParticipationService } from '../participation/participation.service';
 import { Prisma } from '../generated/prisma/client';
 import { CampaignStatus, SessionStatus } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
@@ -35,12 +36,10 @@ function harness() {
   });
   const tx = {
     user: {
-      findUnique: jest
-        .fn()
-        .mockResolvedValue({
-          status: 'APPROVED',
-          clubRoles: [{ role: 'MASTER' }],
-        }),
+      findUnique: jest.fn().mockResolvedValue({
+        status: 'APPROVED',
+        clubRoles: [{ role: 'MASTER' }],
+      }),
     },
     campaign: {
       findUnique: jest.fn().mockResolvedValue({
@@ -79,6 +78,9 @@ function harness() {
       prisma,
       new TableActorsService(prisma, new AuthorizationService(prisma)),
       new TableRulesService(prisma),
+      {
+        complete: jest.fn().mockResolvedValue(undefined),
+      } as unknown as ParticipationService,
     ),
   };
 }
@@ -277,12 +279,10 @@ describe('PR #41 inactivity versus session writes', () => {
           let stagedDate = snapshotDate;
           const tx = {
             user: {
-              findUnique: jest
-                .fn()
-                .mockResolvedValue({
-                  status: 'APPROVED',
-                  clubRoles: [{ role: 'MASTER' }],
-                }),
+              findUnique: jest.fn().mockResolvedValue({
+                status: 'APPROVED',
+                clubRoles: [{ role: 'MASTER' }],
+              }),
             },
             campaign: {
               findUnique: jest.fn(async () => {
@@ -371,6 +371,9 @@ describe('PR #41 inactivity versus session writes', () => {
         prisma,
         new TableActorsService(prisma, new AuthorizationService(prisma)),
         rules,
+        {
+          complete: jest.fn().mockResolvedValue(undefined),
+        } as unknown as ParticipationService,
       );
       const pending = reconciliation.reconcile(now);
       if (mode === 'reconciliation-first') await pending;

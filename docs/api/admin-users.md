@@ -142,8 +142,10 @@ perfis, email, contatos, nascimento, notas, tokens ou bodies administrativos.
   suspensão, mas não aprovam transições manuais independentes das futuras regras
   disciplinares. Fica para sanctions/moderação, sem antecipar restrições.
 - Não há recuperação de DELETION_PENDING nem anonimização definitiva.
-- Reports, warnings, pesos/recorrência, sanctions, expulsão, appeals e moderação
-  de feedback permanecem fora do escopo. Nenhum dado dessas áreas é exposto.
+- Reports, warnings, pesos/recorrência, sanctions, expulsão e appeals permanecem
+  fora do escopo. Moderação de feedback usa
+  [rotas próprias](feedbacks-e-presenca.md#ocultação-administrativa); nenhum dado
+  dessas áreas é exposto pelas rotas de administração de usuários.
 - O [audit log administrativo](audit-log.md) registra revisão inicial e mutações
   de papéis bem-sucedidas, inclusive no-ops; não é histórico disciplinar ou
   auditoria de leituras/falhas.

@@ -476,6 +476,9 @@ model SessionParticipant {
   confirmedAt  DateTime?
   attendedAt   DateTime?
 
+  // Último motivo de correção administrativa da presença; nunca é público.
+  attendanceCorrectionReason String?
+
   // Informações de cancelamento da participação.
   cancelledAt        DateTime?
   cancellationReason String?
@@ -507,6 +510,11 @@ model Feedback {
 
   targetType   FeedbackTargetType
   targetUserId String?
+
+  // Chave obrigatória calculada pela API, nunca recebida do cliente:
+  // SESSION ou MASTER:<targetUserId> ou PLAYER:<targetUserId>.
+  // Evita a semântica de NULL em índices únicos de feedback de sessão.
+  targetKey String
 
   // A aplicação valida:
   // rating >= 0
@@ -545,6 +553,7 @@ model Feedback {
   //
   // O autor também deve possuir participação válida na sessão.
 
+  @@unique([authorId, sessionId, targetKey])
   @@index([authorId, sessionId])
   @@index([targetUserId])
   @@index([sessionId, targetType])

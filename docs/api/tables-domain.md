@@ -135,11 +135,19 @@ Regras:
 - somente sessões `SCHEDULED` podem ser alteradas;
 - cancelamento exige motivo;
 - sessão futura não pode ser concluída;
+- conclusão exige chamada dos jogadores não cancelados e registra o responsável
+  como MASTER/ATTENDED, atomicamente com a auditoria;
 - a sessão obrigatória de um one-shot não pode ser apagada isoladamente;
 - alterações diretas de título, data ou estado da sessão de one-shot retornam
   `ONE_SHOT_SESSION_MANAGED_BY_ONE_SHOT` antes de qualquer escrita;
 - todas as mutações do agregado OneShot + Session passam por `OneShotsService`,
   que sincroniza os estados e remove a aprovação anterior ao editar conteúdo.
+
+O [contrato de participação e presença](feedbacks-e-presenca.md) define as
+rotas privadas de inclusão gerenciada, chamada, cancelamento e correção.
+Não há autoinscrição ou substituição de mestre por sessão. A conclusão de
+one-shot também integra a chamada pelo OneShotsService, sem rota paralela
+para alterar o status de sua sessão.
 
 ## One-shots
 
@@ -234,6 +242,13 @@ não reaproveitar contagem anterior ou continuar com escrita fora da transação
 Rollback é responsabilidade da transação Prisma. Não há SQL raw, lock de provider
 ou dependência de Supabase nessas regras.
 
+O helper também reconhece o erro estruturado DriverAdapterError com
+cause.kind = TransactionWriteConflict, observado ao confirmar transações no
+adapter PrismaPg 7.10.1. Aplica o mesmo retry completo e limite de três
+tentativas de P2034, sem comparar texto de mensagens ou repetir outros erros.
+Esse ajuste foi necessário para participação/presença e concorrência entre
+inclusão de jogador e conclusão da sessão.
+
 Mutações de Campaign e OneShot existentes também leem e validam o estado dentro
 da transação Serializable da escrita, evitando decisões baseadas em estado
 anterior a uma publicação, edição, encerramento ou correção concorrente. Na
@@ -276,8 +291,9 @@ inicial em ambos os agregados.
 
 Aprovação administrativa de Campaign/OneShot e correção administrativa de
 OneShot persistem [audit log](audit-log.md) na mesma transação, com requestId e
-metadata mínima, sem notas ou conteúdo da mesa. As demais ações de mestre ou
-gerenciamento comum não são auditadas por esse contrato.
+metadata mínima, sem notas ou conteúdo da mesa. Participação, chamada e conclusão
+de Session também são auditadas pelo contrato de presença, inclusive quando
+executadas pelo mestre. Outras ações comuns permanecem fora da auditoria.
 
 ## Mesas do usuário
 
@@ -286,7 +302,9 @@ gerenciamento comum não são auditadas por esse contrato.
 - `mastered`: campanhas e one-shots conduzidos pelo usuário;
 - `participating`: participações do usuário em sessões.
 
-Isso mantém separadas a função de mestre e a participação como jogador.
+`mastered` representa propriedade das mesas; `participating` representa vínculos
+por sessão e agora inclui MASTER/ATTENDED após conclusão. O campo role distingue
+a atuação. O novo attendanceCorrectionReason administrativo não é selecionado.
 Esta rota permanece sem paginação; paginar suas três coleções exige um contrato
 próprio e fica como melhoria futura.
 

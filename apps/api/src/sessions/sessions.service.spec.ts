@@ -5,6 +5,7 @@ import {
   SessionStatus,
 } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
+import { ParticipationService } from '../participation/participation.service';
 import { TableActorsService } from '../tables/table-actors.service';
 import { SessionsService } from './sessions.service';
 import { TableRulesService } from '../tables/table-rules.service';
@@ -40,6 +41,9 @@ describe('SessionsService', () => {
     prisma,
     actorMethods as unknown as TableActorsService,
     new TableRulesService(prisma),
+    {
+      complete: jest.fn().mockResolvedValue(undefined),
+    } as unknown as ParticipationService,
   );
 
   const futureDate = new Date(Date.now() + 86_400_000);

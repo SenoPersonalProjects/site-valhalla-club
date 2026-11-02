@@ -10,6 +10,7 @@ import {
   Post,
 } from '@nestjs/common';
 import { CurrentUserId } from '../common/http/current-user-id.decorator';
+import { CurrentRequestId } from '../common/http/current-request-id.decorator';
 import { ChangeSessionStatusDto } from './dto/change-session-status.dto';
 import { CreateSessionDto } from './dto/create-session.dto';
 import { UpdateSessionDto } from './dto/update-session.dto';
@@ -60,8 +61,9 @@ export class SessionsController {
     @Param('id') id: string,
     @CurrentUserId() userId: string,
     @Body() dto: ChangeSessionStatusDto,
+    @CurrentRequestId() requestId: string,
   ) {
-    return this.sessionsService.changeStatus(id, userId, dto);
+    return this.sessionsService.changeStatus(id, userId, dto, requestId);
   }
 
   @Delete(':id')

@@ -37,9 +37,13 @@ Ver [contrato de autenticação](docs/api/auth.md), incluindo configuração obr
 Homologação da Fase 2: frontend Vercel, API NestJS no Render Free e PostgreSQL
 hospedado no Supabase Free. Prisma 7, schema inicial, migration aplicada em
 homologação, logging estruturado/Request ID e domínio base de Campaign, Session
-e OneShot já existem. Auth/JWT está implementada no código; administração completa
-de usuários e os demais fluxos continuam fora dessa entrega. A migration adicional
-de `authVersion` precisa ser aplicada pelo fluxo autorizado antes do deploy.
+e OneShot já existem. O código também implementa autenticação, autorização,
+perfil, administração técnica de usuários, audit log e
+[participação, presença e feedback](docs/api/feedbacks-e-presenca.md).
+Reports e fluxos disciplinares permanecem sem endpoints. As migrations de
+`authVersion`, unicidade de feedback e motivo privado de correção precisam estar
+aplicadas pelo fluxo autorizado antes do deploy; a validação local desta entrega
+não comprova a aplicação das duas últimas em homologação.
 API NestJS e MySQL no Railway são **produção planejada**, condicionada a
 homologação, métricas e validação da migração. Supabase é usado como PostgreSQL
 hospedado, sem adotar Auth ou outros serviços como fundação do domínio.
@@ -73,6 +77,7 @@ Fundamentos da Fase 2: arquitetura (`86e39wfaq`), métricas/capacidade
 - [Header e Hero](docs/header-hero-landing.md)
 - [Prisma ORM, PostgreSQL e portabilidade](docs/database/prisma-postgresql-e-portabilidade-mysql.md)
 - [Campanhas, sessões e one-shots](docs/api/tables-domain.md)
+- [Feedbacks e presença em sessões](docs/api/feedbacks-e-presenca.md)
 - [Arquitetura e ambientes da Fase 2](docs/architecture/fase2-ambientes.md)
 - [Métricas e capacidade da Fase 2](docs/observability/metricas-capacidade-fase2.md)
 - [Privacidade e LGPD da Fase 2](docs/privacy/lgpd-fase2.md)
@@ -99,8 +104,10 @@ task branch → develop → main
 
 **Fase 2 em desenvolvimento/homologação:** autenticação/cadastro/aprovação,
 papéis, perfil, campanhas, sessões, one-shots, participações, feedback, reports,
-advertências, sanções, recursos, administração e audit log. O domínio base de
-mesas já existe; schema não significa que todos esses fluxos estejam entregues.
+advertências, sanções, recursos, administração e audit log. Participação, chamada
+e feedback estão implementados e validados localmente na API; interface e
+homologação desses fluxos permanecem pendentes. Schema não significa que reports
+e disciplina estejam entregues.
 
 **Futuro / fora desta etapa:** menores de idade, marketplace de assets/homebrews,
 pagamentos, fórum, galeria, enquetes, Google Calendar e ferramentas avançadas de
