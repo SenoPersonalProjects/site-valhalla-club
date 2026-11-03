@@ -105,14 +105,39 @@ são fundação do domínio. Detalhes canônicos:
 [métricas, capacidade e logs seguros](../../docs/observability/metricas-capacidade-fase2.md)
 e [dados pessoais e acesso](../../docs/privacy/lgpd-fase2.md).
 
-O [audit log administrativo](../../docs/api/audit-log.md) persiste as sete ações
-administrativas explícitas na mesma transação, inclusive no-ops, e oferece
+O [audit log administrativo](../../docs/api/audit-log.md) persiste as ações
+administrativas documentadas na mesma transação, inclusive no-ops, e oferece
 consulta paginada read-only em `GET /admin/audit-logs` para ADMIN/DEV aprovados.
 Não substitui observabilidade nem registra leituras, auth ou ações do titular.
 Participação, feedback e disciplina têm modelos no schema; seus fluxos completos
 não estão implementados por esta documentação.
 
+O [catálogo de categorias disciplinares](../../docs/api/advertencias-pesos-recorrencia-expiracao.md)
+possui provisionamento explícito e consulta paginada em
+`GET /admin/disciplinary-categories`, somente para ADMIN/DEV aprovados. A API não
+provisiona o catálogo no startup. Advertências diretas ou vinculadas a report usam
+`POST /admin/warnings`,
+com cálculo Decimal de pesos/recorrência, vencimento e auditoria atômica.
+Lista/detalhe usam `GET /admin/warnings` e `GET /admin/warnings/:id`; o resumo
+ativo usa `GET /admin/users/:userId/warnings/summary`. Todas exigem ADMIN/DEV
+aprovado. Consultas desconsideram vencidas mesmo antes do job e retornam pesos
+como strings decimais. Com `reportId`, a criação exige report `RESOLVED` de tipo
+`USER`, usuário/categoria correspondentes, categoria ativa e motivo explícito.
+Um report nunca é reutilizado, mesmo após expiração/reversão da advertência.
+O fluxo HTTP de envio/resolução de reports depende de sua task.
+`PATCH /admin/warnings/:id/reversal` exige ADMIN/DEV e motivo válido; reverte
+ativas/expiradas sem recalcular o histórico. Repetições preservam a primeira
+decisão e registram auditoria sem novo update. O job de expiração roda no startup
+e a cada hora: até quatro lotes de 25 registros, com update condicional e
+`WARNING_EXPIRED` atômicos por lote. Ele preserva pesos/reversões e retoma o
+restante em outro ciclo; logs técnicos contêm apenas agregados ou falha genérica.
+Não há punição automática.
+
 ## Scripts
+
+Os [resultados dos testes manuais](../../docs/api/advertencias-testes-manuais.md)
+registram as 94 verificações executadas com dados fictícios em banco local
+dedicado. Os scripts temporários de preparação e execução não integram a entrega.
 
 ```bash
 npm run start:dev
@@ -122,6 +147,11 @@ npm run test:e2e
 npm run prisma:validate
 npm run prisma:generate
 ```
+
+Após conferir a `DATABASE_URL` do ambiente autorizado e suas migrations, o
+provisionamento opcional é `npm run seed:disciplinary-categories`. O `preseed`
+compila pelo build existente; o comando insere apenas códigos ausentes e
+preserva categorias existentes. Não exige variáveis novas nem inicia a API.
 
 Os comandos de build, execução e testes geram o Prisma Client automaticamente. `prisma:validate` e `prisma:generate` não abrem conexão e podem rodar antes de a URL real existir.
 
@@ -148,9 +178,12 @@ futura produção. Rotação por configuração, sem alteração de código.
 ## Migrations
 
 `20261021120000_add_user_auth_version` acrescenta somente `User.authVersion`
-com default 0. A migration inicial permanece intacta. Nesta implementação nenhuma
-migration foi aplicada: valide/revise e aplique pelo fluxo autorizado do ambiente
-antes de executar a API. O histórico PostgreSQL não deve ser aplicado no MySQL.
+com default 0. A migration inicial permanece intacta. O histórico também inclui
+`20261103120000_enforce_warning_report_uniqueness`, que limita cada report a uma
+advertência e preserva múltiplas origens diretas sem report. Foi aplicada e
+validada somente em PostgreSQL local descartável; homologação permanece pendente.
+Valide/revise o histórico pelo fluxo autorizado antes de executar a API.
+O histórico PostgreSQL não deve ser aplicado no MySQL.
 
 - Desenvolvimento: `npm run prisma:migrate:dev -- --name nome_da_migration`.
 - Homologação e produção: `npm run prisma:migrate:deploy`.

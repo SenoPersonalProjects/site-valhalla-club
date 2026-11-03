@@ -26,6 +26,8 @@
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:migrate:status": "prisma migrate status",
+    "preseed:disciplinary-categories": "npm run build",
+    "seed:disciplinary-categories": "node dist/warnings/seed-disciplinary-categories.js",
     "pretest": "npm run prisma:generate",
     "test": "jest",
     "pretest:watch": "npm run prisma:generate",

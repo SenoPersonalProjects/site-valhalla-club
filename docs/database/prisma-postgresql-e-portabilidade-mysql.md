@@ -55,6 +55,16 @@ O schema atual contém os modelos iniciais da Fase 2 e a migration correspondent
 Novas alterações devem continuar sendo representadas por migrations revisáveis,
 sem substituir o histórico já aplicado.
 
+Advertências acrescentam `20261103120000_enforce_warning_report_uniqueness`,
+validada apenas em PostgreSQL local isolado. A chave única de `Warning.reportId`
+permite múltiplos nulos para a origem direta e bloqueia reutilização de um report,
+mesmo no histórico. Duplicatas legadas abortam a migration sem exclusão automática.
+O [contrato de advertências](../api/advertencias-pesos-recorrencia-expiracao.md)
+descreve o provisionamento idempotente do catálogo por
+`npm run seed:disciplinary-categories`, executado explicitamente no ambiente
+autorizado, após as migrations. Migration e catálogo não foram aplicados em
+homologação nesta entrega.
+
 ## Fluxo de homologação e produção
 
 Configure `DATABASE_URL` como segredo do ambiente e aplique somente migrations já revisadas e versionadas:

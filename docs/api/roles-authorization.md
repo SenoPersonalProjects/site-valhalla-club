@@ -87,6 +87,10 @@ antes da camada de roles.
 | PATCH `/admin/users/:id/registration-review` | ADMIN ou DEV de sistema |
 | GET `/admin/users`, GET `/admin/users/:id` | ADMIN ou DEV de sistema |
 | GET `/admin/audit-logs` | ADMIN ou DEV de sistema; consulta read-only |
+| GET `/admin/disciplinary-categories` | ADMIN ou DEV de sistema; categorias ativas, consulta read-only |
+| POST `/admin/warnings` | ADMIN ou DEV de sistema; criação direta/via report com justificativa e auditoria |
+| PATCH `/admin/warnings/:id/reversal` | ADMIN ou DEV de sistema; motivo obrigatório, inclusive em repetição |
+| GET `/admin/warnings`, GET `/admin/warnings/:id`, GET `/admin/users/:userId/warnings/summary` | ADMIN ou DEV de sistema; consultas disciplinares privadas |
 | PATCH `/admin/users/:id/system-role` | ADMIN ou DEV de sistema; outro alvo APPROVED |
 | POST `/admin/users/:id/club-roles`, DELETE `/admin/users/:id/club-roles/:role` | ADMIN ou DEV de sistema; outro alvo APPROVED |
 | PATCH `/admin/campaigns/:id/approval` | ADMIN ou DEV de sistema |
@@ -104,6 +108,21 @@ Essas decisões continuam nos serviços, via `TableActorsService.assertCanManage
 As rotas públicas permanecem exatamente GET `/`, GET `/health`,
 GET `/campaigns/public`, GET `/one-shots/public`, POST `/auth/register` e
 POST `/auth/login`.
+
+A consulta de [categorias disciplinares](advertencias-pesos-recorrencia-expiracao.md)
+relê a autorização no mesmo TransactionClient dos itens e total, com snapshot
+RepeatableRead. Não há seed implícito, evento administrativo de leitura ou
+acesso concedido apenas por ClubRole.ADMIN.
+
+Advertências relêem a mesma política no TransactionClient. Criação usa
+Serializable com até três tentativas, repetindo autorização e cálculo diante de
+conflito de escrita. Lista, detalhe e resumo usam RepeatableRead e não geram
+auditoria de leitura. O usuário advertido precisa existir; seu estado e seus
+papéis não são alterados pela pontuação. Não há consulta pública ou pelo titular
+nesta versão. Contrato: [advertências](advertencias-pesos-recorrencia-expiracao.md).
+Reversão usa a mesma política dentro de cada tentativa Serializable. Não exige
+que o operador seja o criador original; uma repetição por outro administrador
+preserva a primeira decisão e audita o operador atual.
 
 ## Domínio e transações
 

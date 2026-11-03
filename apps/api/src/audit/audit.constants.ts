@@ -3,6 +3,7 @@ import {
   ApprovalStatus,
   ClubRole,
   SystemRole,
+  WarningStatus,
 } from '../generated/prisma/enums';
 
 export const AUDIT_ACTION = {
@@ -13,12 +14,16 @@ export const AUDIT_ACTION = {
   CAMPAIGN_APPROVAL_REVIEWED: 'CAMPAIGN_APPROVAL_REVIEWED',
   ONE_SHOT_APPROVAL_REVIEWED: 'ONE_SHOT_APPROVAL_REVIEWED',
   ONE_SHOT_CORRECTED: 'ONE_SHOT_CORRECTED',
+  WARNING_CREATED: 'WARNING_CREATED',
+  WARNING_REVERSED: 'WARNING_REVERSED',
+  WARNING_EXPIRED: 'WARNING_EXPIRED',
 } as const;
 
 export const AUDIT_ENTITY = {
   USER: 'USER',
   CAMPAIGN: 'CAMPAIGN',
   ONE_SHOT: 'ONE_SHOT',
+  WARNING: 'WARNING',
 } as const;
 
 type ReviewMetadata = {
@@ -28,6 +33,22 @@ type ReviewMetadata = {
 };
 type RoleMetadata = { changed: boolean; role: ClubRole };
 type AuditEvents = {
+  WARNING_EXPIRED: {
+    entityType: 'WARNING';
+    metadata: { changed: true; fromStatus: 'ACTIVE'; toStatus: 'EXPIRED' };
+  };
+  WARNING_REVERSED: {
+    entityType: 'WARNING';
+    metadata: {
+      changed: boolean;
+      fromStatus: WarningStatus;
+      toStatus: 'REVERSED';
+    };
+  };
+  WARNING_CREATED: {
+    entityType: 'WARNING';
+    metadata: { changed: boolean; hasReport: boolean };
+  };
   USER_REGISTRATION_REVIEWED: {
     entityType: 'USER';
     metadata: {

@@ -126,6 +126,31 @@ Não use `prisma db push` em produção.
 
 Nunca execute `prisma:migrate:dev` com a URL de homologação. O ambiente ou job responsável por `prisma:migrate:deploy` deve instalar as `devDependencies`, pois elas incluem a CLI do Prisma.
 
+## Catálogo de categorias disciplinares
+
+O catálogo inicial é provisionado explicitamente em `apps/api` com
+`npm run seed:disciplinary-categories`, após conferir a conexão autorizada e
+aplicar as migrations. O comando compila a API, insere somente códigos ausentes
+e preserva personalizações e categorias inativas. Não é executado no startup.
+Detalhes e estado de implementação no
+[contrato de advertências](api/advertencias-pesos-recorrencia-expiracao.md).
+
+## Reconciliação automática de advertências
+
+Ao iniciar esta versão da API, `WarningExpirationService` atualiza advertências
+ACTIVE vencidas para EXPIRED e registra auditoria interna na mesma transação de
+cada lote. O agendamento é horário, com até quatro lotes de 25 registros por
+execução. Confirme a conexão local/isolada e aplique as migrations revisadas antes
+de iniciar o processo; desenvolvimento usa dados sintéticos. O seed de categorias
+continua explícito e seu CLI não inicia jobs.
+
+Não há variável de ambiente ou serviço externo novo para o job. Logs de sucesso
+informam somente `count`, `batches` e `batchLimitReached`; falhas usam
+`warnings_expiration_reconciliation_failed` sem detalhes da conexão. Backlog
+restante é retomado no próximo ciclo/startup e não mantém peso indevido nas
+consultas, que já respeitam o vencimento. Ver o contrato de advertências para
+limites, concorrência e rollback por lote.
+
 ## Testes da API
 
 Os scripts existentes incluem `npm run lint`, `npm run test`, `npm run test:e2e` e `npm run build`. O script de lint da API contém `--fix`; não o execute em uma auditoria ou revisão sem autorização para escrita.
