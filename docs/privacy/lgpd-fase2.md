@@ -19,6 +19,24 @@ considerados implementados apenas porque seus modelos existem.
 As regras abaixo orientam a implementação e seus testes futuros; esta tarefa
 não cria endpoints nem jobs de retenção.
 
+Na entrega de [advertências](../api/advertencias-pesos-recorrencia-expiracao.md),
+criação direta/via report, reversão, lista, detalhe e resumo estão implementados exclusivamente para
+ADMIN/DEV aprovados. A lista omite motivos e dados de report; detalhe retorna a
+decisão administrativa, sem join de relato, evidência, perfil ou credenciais.
+O resumo contém somente contagens/pesos por usuário e categoria. Não há acesso
+público ou pelo titular nesta versão; esse retorno permanece uma integração
+futura controlada. Logs e metadata de auditoria não recebem justificativas,
+categorias, gravidade ou pontuação.
+O vínculo com report lê apenas elegibilidade e correspondências, sem buscar
+relato, autoria, resolução ou evidências. Não divulga conteúdo do report ao
+destinatário nem modifica sua decisão de divulgação.
+O motivo de reversão fica na advertência administrativa, sem cópia em logs ou
+metadata de auditoria. Repetições não sobrescrevem o primeiro motivo, ator ou data.
+Expiração agendada seleciona somente IDs vencidos e normaliza o estado, sem ler
+motivos, usuários, relatos ou evidências. Ator/Request ID são nulos na auditoria
+interna; logs contêm somente contadores agregados ou falha genérica. Expirar não
+apaga o histórico nem cria sanção.
+
 - Menores de 18 anos ficam fora da primeira versão autenticada; a futura entrada
   deve validar elegibilidade, sem coletar documentos para isso por padrão.
 - Não coletar CPF, RG, biometria ou endereço. Endereço só poderá ser considerado
@@ -53,7 +71,7 @@ podem permitir vinculação a pessoas e não equivalem a anonimização.
 | `Warning`: usuário/report/categoria, gravidade, pesos, recorrência, status, motivo, vencimento, criador, reversão e timestamps | Advertência e memória da decisão; administrativo | Administração autorizada; titular recebe decisão pertinente sem material de terceiros; expiração não equivale a apagar histórico | Preservar relações/cálculo necessários à revisão; minimizar identificação e motivos textuais quando possível; sem prazo legal presumido |
 | `Sanction`: usuário, report/warning, tipo, escopo de campanha/sessão/outro, motivo, início/fim, status, criador/reversor e timestamps | Aplicação e revisão de restrições; administrativo | Administração; titular recebe decisão/escopo pertinente; mestre recebe somente restrição operacional estritamente necessária, sem dossiê | Conservar histórico necessário e vínculos íntegros; remover identificadores/texto pessoal dispensável; revisar necessidade após encerramento |
 | `Appeal`: usuário, warning/sanction, sequência, justificativa, status, revisor, resposta e timestamps | Recurso e revisão da decisão; privado/administrativo | Titular do recurso e administração autorizada; ocultar informações de terceiros | Preservar sequência e decisão enquanto necessárias; revisar justificativas/respostas para minimização e anonimização |
-| `AuditLog`: `actorId`, `action`, `entityType`, `entityId`, `requestId`, `metadata`, `createdAt` | Rastreabilidade administrativa futura; administrativo | Somente operadores autorizados, sem endpoint público; metadata mínima e sem cópia de conteúdo sensível | Remover/minimizar ator e correlações pessoais quando possível sem invalidar histórico necessário; não tratar pseudônimo/ID como anonimização completa |
+| `AuditLog`: `actorId`, `action`, `entityType`, `entityId`, `requestId`, `metadata`, `createdAt` | Rastreabilidade administrativa; administrativo | Somente operadores autorizados, sem endpoint público; metadata mínima e sem cópia de conteúdo sensível | Remover/minimizar ator e correlações pessoais quando possível sem invalidar histórico necessário; não tratar pseudônimo/ID como anonimização completa |
 | `GameSystem`, `DisciplinaryCategory` | Catálogos de sistema e classificação; não são perfis pessoais | Sistemas ativos podem ser públicos; categorias disciplinares não exigem exposição pública | Preservar referências usadas pelo histórico; não inserir nomes/relatos pessoais nos rótulos |
 | Logs operacionais e relatórios de capacidade | Diagnóstico e dimensionamento; administrativo | Request ID e agregados; sem payloads/segredos; paths podem conter IDs pessoais | Definir retenção operacional antes de exportar; limitar acesso e apagar cópias dispensáveis; não prolongar conservação só por conveniência |
 

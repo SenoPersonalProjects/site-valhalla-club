@@ -189,7 +189,7 @@ function harness() {
 }
 
 describe('Persistent administrative audit integration', () => {
-  it('defines exactly seven stable actions and three entity types', () => {
+  it('defines the implemented stable actions and entity types', () => {
     expect(Object.values(AUDIT_ACTION)).toEqual([
       'USER_REGISTRATION_REVIEWED',
       'USER_SYSTEM_ROLE_CHANGED',
@@ -198,11 +198,15 @@ describe('Persistent administrative audit integration', () => {
       'CAMPAIGN_APPROVAL_REVIEWED',
       'ONE_SHOT_APPROVAL_REVIEWED',
       'ONE_SHOT_CORRECTED',
+      'WARNING_CREATED',
+      'WARNING_REVERSED',
+      'WARNING_EXPIRED',
     ]);
     expect(Object.values(AUDIT_ENTITY)).toEqual([
       'USER',
       'CAMPAIGN',
       'ONE_SHOT',
+      'WARNING',
     ]);
   });
 

@@ -729,10 +729,12 @@ model Warning {
   // - expiração remove peso ativo, mas preserva histórico;
   // - pontuação nunca gera sanção automaticamente.
 
+  // Um report pode originar no máximo uma advertência, inclusive no histórico.
+  // NULL continua permitindo múltiplas advertências diretas.
+  @@unique([reportId])
   @@index([userId, status])
   @@index([userId, categoryId, status])
   @@index([status, expiresAt])
-  @@index([reportId])
   @@index([createdById])
   @@index([reversedById])
 }
