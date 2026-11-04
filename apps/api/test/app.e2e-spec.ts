@@ -127,6 +127,10 @@ describe('AppController (e2e)', () => {
     };
 
     const prismaMock = {
+      sanction: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
       auditLog: { create: jest.fn().mockResolvedValue({ id: 'audit-test' }) },
       onModuleInit: jest.fn(),
       onModuleDestroy: jest.fn(),

@@ -27,6 +27,7 @@ describe('SessionsService', () => {
   const runTransaction = jest.fn<TransactionRunner>();
   const oneShotRepository = { update: jest.fn<RepositoryMethod>() };
   const prisma = {
+    sanction: { findFirst: jest.fn().mockResolvedValue(null) },
     session: sessionRepository,
     campaign: campaignRepository,
     oneShot: oneShotRepository,

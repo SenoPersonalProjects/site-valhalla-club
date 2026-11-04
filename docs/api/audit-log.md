@@ -20,7 +20,7 @@ createdAt desc, id desc. Itens/total/autorização usam o mesmo snapshot
 RepeatableRead. Offset fora do intervalo suportado retorna 400 BAD_REQUEST.
 Requests separados não congelam páginas contra novas inserções.
 
-Filtros opcionais exatos: actorId, entityType (USER/CAMPAIGN/ONE_SHOT), entityId
+Filtros opcionais exatos: actorId, entityType (USER/CAMPAIGN/ONE_SHOT/SANCTION/WARNING/APPEAL), entityId
 e requestId. entityId exige entityType. IDs são strings não vazias até 128
 caracteres; requestId segue o padrão seguro do middleware. Não há contains,
 busca textual/JSON/PII ou intervalo de datas. Filtros/campos extras inválidos
@@ -40,10 +40,17 @@ Constantes TypeScript, sem enum Prisma. entityId é o ID técnico afetado.
 | CAMPAIGN_APPROVAL_REVIEWED | CAMPAIGN | changed, fromApprovalStatus, toApprovalStatus |
 | ONE_SHOT_APPROVAL_REVIEWED | ONE_SHOT | changed, fromApprovalStatus, toApprovalStatus |
 | ONE_SHOT_CORRECTED | ONE_SHOT | changed, fields |
+| SANCTION_CREATED | SANCTION | changed, type, scopeType, hasReport, hasWarning |
+| SANCTION_REVERSED | SANCTION | changed, fromStatus, toStatus |
+| SANCTION_EXPIRED | SANCTION | changed: true, fromStatus: ACTIVE, toStatus: EXPIRED |
+| WARNING_REVERSED | WARNING | changed, fromStatus, toStatus |
+| APPEAL_SUBMITTED | APPEAL | changed: true, targetType, sequence |
+| APPEAL_REVIEWED | APPEAL | changed, targetType, sequence, fromStatus, toStatus |
 
-Cada request administrativo autorizado concluído com sucesso gera exatamente
-um evento, inclusive no-op (changed:false). Erros/negações/rollback não deixam
-evento de sucesso. changed reflete mudança funcional na própria transação.
+Cada operação administrativa documentada concluída com sucesso gera seu evento,
+inclusive no-op (changed:false). Aprovação de recurso também gera o evento de
+reversão da medida, no mesmo commit. Erros/negações/rollback não deixam eventos
+de sucesso. changed reflete mudança funcional na própria transação.
 SystemRole repetido, revisão inicial repetida aceita, grant existente, remove
 ausente e reaprovação de Campaign ACTIVE + APPROVED são no-ops. A campanha
 ativa continua sem UPDATE de reaprovação para preservar baseline de inatividade.
@@ -58,6 +65,33 @@ Correção enumera somente nomes técnicos alterados: gameSystemId, scheduledAt,
 approvalStatus, status e review (limpeza de revisão). Não copia valores.
 Correção sem mudança funcional tem changed:false; timestamps automáticos não
 são mudança funcional. Quota, janela e reset de aprovação são preservados.
+
+Criação de [sanção](sancoes-restricoes-reversoes-recursos.md) usa
+`SANCTION_CREATED`, com `changed: true`, tipo, escopo e flags de vínculo, sem
+copiar motivo, descrição do escopo ou conteúdo das origens. A criação e a
+auditoria compartilham a transação Serializable; conflitos repetem a operação
+completa e decisões equivalentes rejeitadas não geram eventos de sucesso.
+
+Reversão de sanção registra `SANCTION_REVERSED` na mesma transação, sem copiar
+motivo ou origem. Repetição preserva a primeira decisão e gera `changed: false`,
+sem atualizar timestamps da sanção. Expiração reconciliada registra
+`SANCTION_EXPIRED` com ator/Request ID nulos, somente quando altera ACTIVE para
+EXPIRED. Atualização e auditoria do lote são atômicas; um ciclo sem vencimentos
+não gera evento. Reversão concorrente não é sobrescrita pela expiração.
+
+`APPEAL_SUBMITTED` registra envio do titular autenticado, inclusive quando seu
+acesso comum está bloqueado por sanção. Contém somente tipo do caso e sequência;
+não copia justificativa ou IDs de antecedentes para metadata. Leituras próprias
+não geram evento. Avaliação registra `APPEAL_REVIEWED` com estados, tipo e
+sequência; resposta permanece somente no recurso.
+
+A primeira aprovação registra `WARNING_REVERSED` ou `SANCTION_REVERSED` junto
+da decisão, ambos na mesma transação do recurso. Advertência mantém pesos e
+histórico; sanções relacionadas permanecem independentes. Se a medida já foi
+revertida manualmente, o evento de reversão tem `changed: false` e preserva
+a primeira decisão. Repetição da mesma avaliação registra apenas
+`APPEAL_REVIEWED` com `changed: false`, sem nova reversão ou UPDATE. Decisão oposta
+é rejeitada e não deixa evento de sucesso.
 
 ## Atomicidade e concorrência
 
@@ -93,7 +127,8 @@ CurrentRequestId extrai apenas req.requestId já resolvido pelo middleware.
 Header inválido/ausente é substituído, com o mesmo valor no response x-request-id
 e no AuditLog. AuditService não relê header cru. Correlação não autoriza nada.
 Chamadas diretas podem omitir requestId (null). Eventos HTTP atuais sempre têm
-actorId autenticado; null só prepara futuras ações internas, sem criá-las agora.
+actorId autenticado. A reconciliação interna de expiração usa ator e Request ID
+nulos; não inventa um usuário operador nem correlação HTTP para o scheduler.
 
 Metadata é montada manualmente por evento, com união TypeScript limitada.
 Não armazena DTO/entidade/request integral, email, WhatsApp, nascimento, nome,
@@ -105,9 +140,23 @@ dados restritos; não constituem anonimização jurídica.
 ## Limites
 
 Não audita leituras, register/login/logout, perfil/exclusão do titular, ações
-normais de MASTER, publicação/status comuns ou falhas HTTP. Não implementa
-disciplina, dashboard, exportação, alertas, métricas, retenção automática ou SIEM.
+normais de MASTER, publicação/status comuns ou falhas HTTP. As integrações
+disciplinares atuais cobrem criação/reversão/expiração de sanções, recursos e
+reversão de advertência ao aprovar recurso. O envio de recurso é uma exceção
+explícita à ausência de auditoria das ações comuns do titular. Os demais fluxos
+dependem da task correspondente. Não implementa dashboard, exportação,
+alertas, métricas, retenção automática ou SIEM.
 Observabilidade continua independente, sem receber payload de auditoria.
 Retenção/descarte dependem de aprovação conforme [LGPD](../privacy/lgpd-fase2.md).
 Testes usam doubles de commit/rollback; integração autorizada com PostgreSQL e
 futuro MySQL reais permanece necessária para validar concorrência operacional.
+A etapa de criação de sanções também foi conferida em PostgreSQL local isolado,
+incluindo rollback por falha de auditoria e criação concorrente; isso não representa
+homologação do fluxo disciplinar completo ou validação operacional em MySQL.
+A etapa de reversão/expiração também foi conferida com PostgreSQL local real,
+incluindo reversões simultâneas, disputa com expiração, reconciliadores
+concorrentes e rollback integral provocado por falha real de auditoria.
+A etapa de recursos também foi conferida com PostgreSQL real descartável:
+limite de tentativas sob concorrência, avaliações iguais/opostas simultâneas,
+aprovação concorrente com reversão manual e rollback quando a auditoria final
+falha. Isso não representa homologação ou teste operacional em MySQL.

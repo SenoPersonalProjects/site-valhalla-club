@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { assertSanctionAllows } from '../sanctions/sanction-restrictions';
 import { AuditService } from '../audit/audit.service';
 import { AUDIT_ACTION, AUDIT_ENTITY } from '../audit/audit.constants';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
@@ -67,6 +68,7 @@ export class OneShotsService {
         this.actors.assertMaster(actorId, transaction),
         this.actors.assertActiveGameSystem(dto.gameSystemId, transaction),
       ]);
+      await assertSanctionAllows(transaction, actorId, 'CREATE_TABLE');
       const scheduledAt = this.rules.parseOneShotDate(dto.session.scheduledAt);
       await this.rules.assertOneShotCapacity(
         transaction,
@@ -176,7 +178,7 @@ export class OneShotsService {
 
       if (sessionData && Object.keys(sessionData).length > 0) {
         await transaction.session.update({
-          where: { id: oneShot.session!.id },
+          where: { id: oneShot.session.id },
           data: sessionData,
         });
       }
@@ -226,7 +228,7 @@ export class OneShotsService {
         );
       }
 
-      await transaction.session.delete({ where: { id: oneShot.session!.id } });
+      await transaction.session.delete({ where: { id: oneShot.session.id } });
       await transaction.oneShot.delete({ where: { id } });
     });
   }
@@ -325,6 +327,9 @@ export class OneShotsService {
     return this.rules.serializable(async (transaction) => {
       const oneShot = await this.getByIdOrThrow(id, transaction);
       await this.actors.assertCanManage(oneShot.masterId, actorId, transaction);
+      await assertSanctionAllows(transaction, oneShot.masterId, 'MASTER', {
+        sessionId: oneShot.session?.id,
+      });
 
       if (oneShot.approvalStatus !== ApprovalStatus.APPROVED) {
         throw conflict(
@@ -362,6 +367,10 @@ export class OneShotsService {
     return this.rules.serializable(async (transaction) => {
       const oneShot = await this.getByIdOrThrow(id, transaction);
       await this.actors.assertCanManage(oneShot.masterId, actorId, transaction);
+      if (dto.status === OneShotStatus.COMPLETED)
+        await assertSanctionAllows(transaction, oneShot.masterId, 'MASTER', {
+          sessionId: oneShot.session?.id,
+        });
 
       if (oneShot.status !== OneShotStatus.SCHEDULED) {
         throw conflict(
@@ -411,7 +420,7 @@ export class OneShotsService {
           : SessionStatus.COMPLETED;
 
       await transaction.session.update({
-        where: { id: oneShot.session!.id },
+        where: { id: oneShot.session.id },
         data: {
           status: sessionStatus,
           cancelledAt:

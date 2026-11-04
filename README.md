@@ -37,8 +37,12 @@ Ver [contrato de autenticação](docs/api/auth.md), incluindo configuração obr
 Homologação da Fase 2: frontend Vercel, API NestJS no Render Free e PostgreSQL
 hospedado no Supabase Free. Prisma 7, schema inicial, migration aplicada em
 homologação, logging estruturado/Request ID e domínio base de Campaign, Session
-e OneShot já existem. Auth/JWT está implementada no código; administração completa
-de usuários e os demais fluxos continuam fora dessa entrega. A migration adicional
+e OneShot já existem. Auth/JWT e administração técnica de usuários estão
+implementados no código; os contratos e limites ficam no [README da API](apps/api/README.md).
+Sanções, reversões e recursos estão implementados e validados localmente conforme
+o [contrato disciplinar](docs/api/sancoes-restricoes-reversoes-recursos.md), sem
+declarar homologação ou integrações com participação/eventos ainda ausentes.
+A migration adicional
 de `authVersion` precisa ser aplicada pelo fluxo autorizado antes do deploy.
 API NestJS e MySQL no Railway são **produção planejada**, condicionada a
 homologação, métricas e validação da migração. Supabase é usado como PostgreSQL

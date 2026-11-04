@@ -3,6 +3,7 @@ import { Prisma } from '../generated/prisma/client';
 import { CampaignStatus } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { badRequest, conflict } from './table-domain.errors';
+import { isTransactionWriteConflict } from '../common/database/transaction-conflict';
 
 export const TABLE_RULE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 export const CLUB_TIME_ZONE = 'America/Maceio';
@@ -59,11 +60,7 @@ export class TableRulesService {
           isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
         });
       } catch (error) {
-        if (
-          !(error instanceof Prisma.PrismaClientKnownRequestError) ||
-          error.code !== 'P2034'
-        )
-          throw error;
+        if (!isTransactionWriteConflict(error)) throw error;
         if (attempt === 2) {
           throw conflict(
             'TABLE_CONCURRENT_CHANGE',

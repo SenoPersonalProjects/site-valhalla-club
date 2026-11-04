@@ -40,14 +40,13 @@ describe('Quota transaction boundaries', () => {
           const write = jest.fn().mockResolvedValue({ id: 'result' });
           attempts.push({ count, write });
           const tx = {
+            sanction: { findFirst: jest.fn().mockResolvedValue(null) },
             campaign: {
-              findUnique: jest
-                .fn()
-                .mockResolvedValue({
-                  masterId: 'master-1',
-                  status: CampaignStatus.DRAFT,
-                  approvalStatus: ApprovalStatus.APPROVED,
-                }),
+              findUnique: jest.fn().mockResolvedValue({
+                masterId: 'master-1',
+                status: CampaignStatus.DRAFT,
+                approvalStatus: ApprovalStatus.APPROVED,
+              }),
               count,
               update: write,
             },
@@ -66,6 +65,7 @@ describe('Quota transaction boundaries', () => {
         },
       );
       const prisma = {
+        sanction: { findFirst: jest.fn().mockResolvedValue(null) },
         $transaction: transaction,
         campaign: { count: outsideCount, update: outsideWrite },
         oneShot: { count: outsideCount, create: outsideWrite },

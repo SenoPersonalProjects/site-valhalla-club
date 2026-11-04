@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { assertSanctionAllows } from '../sanctions/sanction-restrictions';
 import { CampaignStatus, SessionStatus } from '../generated/prisma/enums';
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -66,6 +67,9 @@ export class SessionsService {
         actorId,
         transaction,
       );
+      await assertSanctionAllows(transaction, campaign.masterId, 'MASTER', {
+        campaignId,
+      });
 
       if (campaign.status === CampaignStatus.ARCHIVED) {
         throw conflict(
@@ -122,6 +126,10 @@ export class SessionsService {
         transaction,
       );
       this.assertCampaignSession(session);
+      await assertSanctionAllows(transaction, this.ownerId(session), 'MASTER', {
+        campaignId: session.campaignId ?? undefined,
+        sessionId: id,
+      });
 
       if (session.status !== SessionStatus.SCHEDULED) {
         throw conflict(
@@ -161,6 +169,13 @@ export class SessionsService {
         transaction,
       );
       this.assertCampaignSession(session);
+      if (dto.status === SessionStatus.COMPLETED)
+        await assertSanctionAllows(
+          transaction,
+          this.ownerId(session),
+          'MASTER',
+          { campaignId: session.campaignId ?? undefined, sessionId: id },
+        );
 
       if (session.status !== SessionStatus.SCHEDULED) {
         throw conflict(

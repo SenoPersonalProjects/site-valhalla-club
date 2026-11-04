@@ -15,6 +15,7 @@ describe('AuthService', () => {
     updateMany: jest.fn(),
   };
   const transaction = {
+    sanction: { findFirst: jest.fn().mockResolvedValue(null) },
     user: { findUnique: jest.fn(), updateMany: jest.fn() },
   };
   const prisma = {
@@ -283,6 +284,7 @@ describe('Authentication concurrency', () => {
     const updates: unknown[] = [];
     const clients: unknown[] = [];
     const root = {
+      sanction: { findFirst: jest.fn().mockResolvedValue(null) },
       user: {
         findUnique: jest.fn(() => {
           throw new Error('State read outside transaction');
@@ -295,6 +297,7 @@ describe('Authentication concurrency', () => {
         callback: (transaction: unknown) => Promise<unknown>,
       ) => {
         const transaction = {
+          sanction: { findFirst: jest.fn().mockResolvedValue(null) },
           user: {
             findUnique: async ({ where }: { where: { id: string } }) => {
               if (where.id !== 'target')
@@ -374,7 +377,10 @@ describe('Authentication concurrency', () => {
       return { count: 1 };
     });
     const service = new AuthService(
-      { user: { updateMany } } as unknown as PrismaService,
+      {
+        sanction: { findFirst: jest.fn().mockResolvedValue(null) },
+        user: { updateMany },
+      } as unknown as PrismaService,
       {} as PasswordService,
       {} as JwtService,
       {} as TableActorsService,

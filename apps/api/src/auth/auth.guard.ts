@@ -10,6 +10,8 @@ import { Request } from 'express';
 import { AccountStatus } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { PUBLIC_ROUTE } from './public.decorator';
+import { DISCIPLINARY_ACCESS } from './disciplinary-access.decorator';
+import { assertSanctionAllows } from '../sanctions/sanction-restrictions';
 
 export const unauthorized = (code: string) =>
   new UnauthorizedException({
@@ -61,7 +63,7 @@ export class AuthGuard implements CanActivate {
       throw unauthorized('AUTH_TOKEN_INVALID');
     }
     const user = await this.prisma.user.findUnique({
-      where: { id: claims.sub as string },
+      where: { id: claims.sub },
       select: { id: true, status: true, authVersion: true },
     });
     if (!user) throw unauthorized('AUTH_TOKEN_INVALID');
@@ -69,6 +71,13 @@ export class AuthGuard implements CanActivate {
       throw unauthorized('AUTH_ACCOUNT_UNAVAILABLE');
     if (user.authVersion !== claims.ver)
       throw unauthorized('AUTH_TOKEN_REVOKED');
+    if (
+      this.reflector.getAllAndOverride<boolean>(DISCIPLINARY_ACCESS, [
+        context.getHandler(),
+        context.getClass(),
+      ]) !== true
+    )
+      await assertSanctionAllows(this.prisma, user.id, 'ACCOUNT');
     request.user = { id: user.id };
     return true;
   }

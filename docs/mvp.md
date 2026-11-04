@@ -40,8 +40,14 @@ do MVP; a Fase 2 é uma etapa distinta em desenvolvimento/homologação.
 
 Já implementados: Prisma 7 integrado, schema/migration inicial (aplicada em
 homologação), logging estruturado com Request ID e domínio base de Campaign,
-Session e OneShot. Auth/JWT não está implementada. Perfil, participação, feedback,
-disciplina e audit log possuem modelagem, sem comprovar seus fluxos de aplicação.
+Session e OneShot. O código também contém autenticação/JWT, papéis, perfil,
+administração técnica e auditoria. Sanções, reversões e recursos foram
+implementados e validados localmente; estado e limitações no
+[contrato disciplinar](api/sancoes-restricoes-reversoes-recursos.md).
+Participação, feedback, emissão de advertências e reports dependem de suas
+tasks nesta base. Consulta própria e reversão de advertência por recurso não
+equivalem ao fluxo completo de advertências. Implementação local não comprova
+homologação ou deploy desses fluxos.
 
 Ambiente de homologação: Vercel / Render Free / Supabase Free (PostgreSQL).
 Railway com API NestJS e MySQL é planejamento condicionado à validação, não

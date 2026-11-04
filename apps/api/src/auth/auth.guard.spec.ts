@@ -13,6 +13,7 @@ describe('AuthGuard', () => {
   const findUnique = jest.fn();
   const reflector = new Reflector();
   const guard = new AuthGuard(reflector, jwt, {
+    sanction: { findFirst: jest.fn().mockResolvedValue(null) },
     user: { findUnique },
   } as unknown as PrismaService);
   function context(headers = {}, handler = () => undefined) {

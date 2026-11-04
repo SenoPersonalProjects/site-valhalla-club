@@ -85,6 +85,10 @@ describe('Authentication with real Bearer JWT (e2e)', () => {
   beforeAll(async () => {
     hash = await bcrypt.hash(password, 12);
     prisma = {
+      sanction: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
       onModuleInit: jest.fn(),
       onModuleDestroy: jest.fn(),
       auditLog: {
