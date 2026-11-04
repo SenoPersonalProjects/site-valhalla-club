@@ -7,8 +7,12 @@ import { Prisma } from '../generated/prisma/client';
 import { AccountStatus } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { RoleRequirement } from './authorization.policies';
+import { assertSanctionAllows } from '../sanctions/sanction-restrictions';
 
-export type AuthorizationClient = Pick<Prisma.TransactionClient, 'user'>;
+export type AuthorizationClient = Pick<
+  Prisma.TransactionClient,
+  'user' | 'sanction'
+>;
 
 @Injectable()
 export class AuthorizationService {
@@ -68,5 +72,6 @@ export class AuthorizationService {
         },
       );
     }
+    await assertSanctionAllows(client, userId, 'ACCOUNT');
   }
 }

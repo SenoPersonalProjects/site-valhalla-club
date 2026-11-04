@@ -833,10 +833,13 @@ No estado atual do projeto:
   de Campaign, Session e OneShot;
 - a landing institucional continua sem depender da API em runtime.
 
-Auth/JWT ainda não está implementada. Contas, perfil, participação, feedback,
-reports, advertências, sanções, recursos e audit log têm modelagem, mas seus
-fluxos de aplicação ainda precisam ser implementados/homologados. O domínio
-base de mesas já existe. Estado e fronteiras canônicos:
+O código atual possui autenticação/JWT, papéis, perfil, administração técnica e
+auditoria, além do domínio base de mesas. Sanções, reversões e recursos possuem
+validação local conforme o [contrato disciplinar](../api/sancoes-restricoes-reversoes-recursos.md),
+sem declarar homologação. Participação, feedback, reports e emissão de advertências
+ainda dependem dos respectivos fluxos nesta base. Consulta/reversão de uma
+advertência por recurso não implementa sua emissão. A existência de modelos
+continua sem comprovar produto completo ou homologação. Estado e fronteiras canônicos:
 [arquitetura da Fase 2](../architecture/fase2-ambientes.md).
 
 PostgreSQL/Supabase permanece como ambiente de desenvolvimento e homologação, enquanto MySQL/Railway continua sendo o destino planejado para produção, sujeito à prova de migração e à avaliação final de capacidade e custo.

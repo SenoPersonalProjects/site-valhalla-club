@@ -15,6 +15,7 @@ import { LoginDto, RegisterDto, RegistrationReviewDto } from './auth.dto';
 import { AuthService } from './auth.service';
 import { Public } from './public.decorator';
 import { AuthRateLimit } from './auth-rate-limit';
+import { AllowDisciplinaryAccess } from './disciplinary-access.decorator';
 
 @Controller('auth')
 export class AuthController {
@@ -37,6 +38,7 @@ export class AuthController {
     return this.auth.me(id);
   }
   @Post('logout')
+  @AllowDisciplinaryAccess()
   @HttpCode(204)
   logout(@CurrentUserId() id: string) {
     return this.auth.logout(id);

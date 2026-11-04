@@ -77,6 +77,7 @@ function harness() {
     $transaction: jest.fn(async (operation: any, options: any) => {
       const draft = structuredClone(state);
       const tx: any = {
+        sanction: { findFirst: jest.fn().mockResolvedValue(null) },
         user: {
           findUnique: jest.fn(async ({ where }: any) =>
             where.id === 'operator'
@@ -189,7 +190,7 @@ function harness() {
 }
 
 describe('Persistent administrative audit integration', () => {
-  it('defines exactly seven stable actions and three entity types', () => {
+  it('defines the implemented stable actions and entity types', () => {
     expect(Object.values(AUDIT_ACTION)).toEqual([
       'USER_REGISTRATION_REVIEWED',
       'USER_SYSTEM_ROLE_CHANGED',
@@ -198,11 +199,20 @@ describe('Persistent administrative audit integration', () => {
       'CAMPAIGN_APPROVAL_REVIEWED',
       'ONE_SHOT_APPROVAL_REVIEWED',
       'ONE_SHOT_CORRECTED',
+      'SANCTION_CREATED',
+      'SANCTION_REVERSED',
+      'SANCTION_EXPIRED',
+      'WARNING_REVERSED',
+      'APPEAL_SUBMITTED',
+      'APPEAL_REVIEWED',
     ]);
     expect(Object.values(AUDIT_ENTITY)).toEqual([
       'USER',
       'CAMPAIGN',
       'ONE_SHOT',
+      'SANCTION',
+      'WARNING',
+      'APPEAL',
     ]);
   });
 

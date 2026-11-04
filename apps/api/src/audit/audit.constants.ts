@@ -3,6 +3,11 @@ import {
   ApprovalStatus,
   ClubRole,
   SystemRole,
+  SanctionType,
+  SanctionScopeType,
+  SanctionStatus,
+  WarningStatus,
+  AppealStatus,
 } from '../generated/prisma/enums';
 
 export const AUDIT_ACTION = {
@@ -13,12 +18,21 @@ export const AUDIT_ACTION = {
   CAMPAIGN_APPROVAL_REVIEWED: 'CAMPAIGN_APPROVAL_REVIEWED',
   ONE_SHOT_APPROVAL_REVIEWED: 'ONE_SHOT_APPROVAL_REVIEWED',
   ONE_SHOT_CORRECTED: 'ONE_SHOT_CORRECTED',
+  SANCTION_CREATED: 'SANCTION_CREATED',
+  SANCTION_REVERSED: 'SANCTION_REVERSED',
+  SANCTION_EXPIRED: 'SANCTION_EXPIRED',
+  WARNING_REVERSED: 'WARNING_REVERSED',
+  APPEAL_SUBMITTED: 'APPEAL_SUBMITTED',
+  APPEAL_REVIEWED: 'APPEAL_REVIEWED',
 } as const;
 
 export const AUDIT_ENTITY = {
   USER: 'USER',
   CAMPAIGN: 'CAMPAIGN',
   ONE_SHOT: 'ONE_SHOT',
+  SANCTION: 'SANCTION',
+  WARNING: 'WARNING',
+  APPEAL: 'APPEAL',
 } as const;
 
 type ReviewMetadata = {
@@ -28,6 +42,54 @@ type ReviewMetadata = {
 };
 type RoleMetadata = { changed: boolean; role: ClubRole };
 type AuditEvents = {
+  APPEAL_SUBMITTED: {
+    entityType: 'APPEAL';
+    metadata: {
+      changed: true;
+      targetType: 'WARNING' | 'SANCTION';
+      sequence: number;
+    };
+  };
+  APPEAL_REVIEWED: {
+    entityType: 'APPEAL';
+    metadata: {
+      changed: boolean;
+      targetType: 'WARNING' | 'SANCTION';
+      sequence: number;
+      fromStatus: AppealStatus;
+      toStatus: 'APPROVED' | 'REJECTED';
+    };
+  };
+  WARNING_REVERSED: {
+    entityType: 'WARNING';
+    metadata: {
+      changed: boolean;
+      fromStatus: WarningStatus;
+      toStatus: 'REVERSED';
+    };
+  };
+  SANCTION_REVERSED: {
+    entityType: 'SANCTION';
+    metadata: {
+      changed: boolean;
+      fromStatus: SanctionStatus;
+      toStatus: 'REVERSED';
+    };
+  };
+  SANCTION_EXPIRED: {
+    entityType: 'SANCTION';
+    metadata: { changed: true; fromStatus: 'ACTIVE'; toStatus: 'EXPIRED' };
+  };
+  SANCTION_CREATED: {
+    entityType: 'SANCTION';
+    metadata: {
+      changed: true;
+      type: SanctionType;
+      scopeType: SanctionScopeType;
+      hasReport: boolean;
+      hasWarning: boolean;
+    };
+  };
   USER_REGISTRATION_REVIEWED: {
     entityType: 'USER';
     metadata: {

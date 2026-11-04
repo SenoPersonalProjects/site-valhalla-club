@@ -36,6 +36,7 @@ describe('Operational state transaction boundaries', () => {
   };
   function harness() {
     const tx = {
+      sanction: { findFirst: jest.fn().mockResolvedValue(null) },
       user: {
         findUnique: jest.fn().mockResolvedValue({
           status: 'APPROVED',
@@ -70,6 +71,7 @@ describe('Operational state transaction boundaries', () => {
       ) => operation(tx as unknown as Prisma.TransactionClient),
     );
     const prisma = {
+      sanction: { findFirst: jest.fn().mockResolvedValue(null) },
       $transaction: transaction,
       campaign: { findUnique: rootRead, update: rootWrite, delete: rootWrite },
       oneShot: { findUnique: rootRead, update: rootWrite, delete: rootWrite },

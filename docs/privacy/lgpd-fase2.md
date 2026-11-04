@@ -19,6 +19,26 @@ considerados implementados apenas porque seus modelos existem.
 As regras abaixo orientam a implementação e seus testes futuros; esta tarefa
 não cria endpoints nem jobs de retenção.
 
+Criação e consultas administrativas de sanções foram implementadas na etapa 3 do
+[contrato disciplinar](../api/sancoes-restricoes-reversoes-recursos.md). A lista
+omite textos livres, origens e responsáveis; o detalhe é restrito a ADMIN/DEV
+aprovados e não carrega relato, evidências ou perfil das origens. A auditoria
+registra somente metadados técnicos limitados. Na etapa 4, o titular aprovado
+consulta suas próprias sanções, inclusive sob suspensão/expulsão, sem acesso
+a responsáveis, IDs de origem, relatos ou evidências. O detalhe próprio inclui
+motivo pertinente e descrição de escopo; a lista omite esses textos livres.
+Bloqueios operacionais retornam erros genéricos, sem revelar a decisão privada.
+Na etapa 5, reversão administrativa preserva a decisão inicial e registra
+responsável, data e justificativa pertinentes; repetição não os sobrescreve.
+Auditoria não copia motivos. Expiração tem evento interno sem ator fictício
+e conserva o histórico. Na etapa 6, o titular aprovado envia e acompanha somente
+seus recursos, inclusive sob suspensão/expulsão. Listas omitem justificativa e
+resposta; o detalhe próprio inclui esses textos e data da decisão, sem o ID do
+avaliador. ADMIN/DEV autorizado usa detalhe administrativo; avaliar exige
+independência em relação ao titular e ao aplicador. Consulta própria de
+advertências omite report e operadores, sem expor relatos ou evidências.
+Justificativa/resposta não são copiadas para logs ou metadata de auditoria.
+
 - Menores de 18 anos ficam fora da primeira versão autenticada; a futura entrada
   deve validar elegibilidade, sem coletar documentos para isso por padrão.
 - Não coletar CPF, RG, biometria ou endereço. Endereço só poderá ser considerado

@@ -11,6 +11,7 @@ import { badRequest, conflict, notFound } from '../tables/table-domain.errors';
 import { ChangeCampaignStatusDto } from './dto/change-campaign-status.dto';
 import { CreateCampaignDto } from './dto/create-campaign.dto';
 import { ReviewCampaignDto } from './dto/review-campaign.dto';
+import { assertSanctionAllows } from '../sanctions/sanction-restrictions';
 import { UpdateCampaignDto } from './dto/update-campaign.dto';
 
 const campaignDetails = {
@@ -55,19 +56,24 @@ export class CampaignsService {
   ) {}
 
   async create(actorId: string, dto: CreateCampaignDto) {
-    await Promise.all([
-      this.actors.assertMaster(actorId),
-      this.actors.assertActiveGameSystem(dto.gameSystemId),
-    ]);
-
-    return this.prisma.campaign.create({
-      data: {
-        masterId: actorId,
-        gameSystemId: dto.gameSystemId,
-        title: this.normalizeRequiredText(dto.title, 'CAMPAIGN_TITLE_REQUIRED'),
-        description: this.normalizeOptionalText(dto.description),
-      },
-      include: campaignDetails,
+    return this.rules.serializable(async (transaction) => {
+      await Promise.all([
+        this.actors.assertMaster(actorId, transaction),
+        this.actors.assertActiveGameSystem(dto.gameSystemId, transaction),
+      ]);
+      await assertSanctionAllows(transaction, actorId, 'CREATE_TABLE');
+      return transaction.campaign.create({
+        data: {
+          masterId: actorId,
+          gameSystemId: dto.gameSystemId,
+          title: this.normalizeRequiredText(
+            dto.title,
+            'CAMPAIGN_TITLE_REQUIRED',
+          ),
+          description: this.normalizeOptionalText(dto.description),
+        },
+        include: campaignDetails,
+      });
     });
   }
 
@@ -207,6 +213,9 @@ export class CampaignsService {
         actorId,
         transaction,
       );
+      await assertSanctionAllows(transaction, campaign.masterId, 'MASTER', {
+        campaignId: id,
+      });
 
       if (campaign.approvalStatus !== ApprovalStatus.APPROVED) {
         throw conflict(

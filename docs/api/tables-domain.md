@@ -25,6 +25,38 @@ mesas abaixo continuam sendo verificadas pelos serviços, com papéis do banco.
 Guards declarativos não substituem a verificação de domínio: as mutações
 transacionais verificam o operador usando o mesmo TransactionClient da escrita.
 
+## Restrições disciplinares nas operações existentes
+
+Além dos papéis e estados existentes, as operações verificam sanções vigentes
+na mesma transação das escritas. As regras são adicionais às permissões atuais:
+
+- Criação de campanha/one-shot: bloqueada por restrição geral de criação ou de
+  atividade como mestre.
+- Publicação: verifica restrição de atividade do mestre responsável, geral ou
+  da campanha/sessão correspondente, inclusive quando um ADMIN/DEV publica.
+- Nova sessão de campanha: verifica o mestre no escopo geral ou da campanha.
+- Edição de título/agenda e conclusão de sessão de campanha: verifica o mestre no escopo
+  geral, da campanha ou da sessão.
+- Conclusão de one-shot: verifica o mestre no escopo geral ou de sua sessão.
+
+Uma restrição de criação isolada não impede publicar um rascunho existente.
+Em one-shots, a alteração da data já exige a rota de correção administrativa;
+edições comuns de texto preservam o fluxo existente de retorno à revisão e ao
+rascunho. A nova publicação continua sujeita à restrição do mestre.
+Escopos específicos não bloqueiam campanhas/sessões diferentes. Cancelamento,
+arquivamento e revisão/correção administrativos preservam as regras existentes;
+não são executados automaticamente por sanção. Papéis e histórico permanecem.
+
+Suspensão de acesso e expulsão bloqueiam o ator nas rotas comuns, inclusive
+administrativas, preservando apenas as exceções autenticadas do
+[contrato disciplinar](sancoes-restricoes-reversoes-recursos.md).
+Bloqueios operacionais retornam `403 TABLE_SANCTIONED`, sem motivos privados.
+Vigência considera início/fim em cada consulta, sem depender de job pontual.
+
+Inclusão de participantes, inscrições em eventos e outras atividades ainda
+dependem dos respectivos fluxos nesta base. Registrar essas restrições não
+representa integração automática com módulos ausentes.
+
 ## Regras de acesso
 
 - criação exige conta aprovada com papel `MASTER`;

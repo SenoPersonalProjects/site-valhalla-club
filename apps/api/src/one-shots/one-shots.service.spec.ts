@@ -27,6 +27,7 @@ describe('OneShotsService', () => {
   const runTransaction = jest.fn<TransactionRunner>();
   const sessionRepository = { update: jest.fn<RepositoryMethod>() };
   const prisma = {
+    sanction: { findFirst: jest.fn().mockResolvedValue(null) },
     oneShot: oneShotRepository,
     session: sessionRepository,
     $transaction: runTransaction,
@@ -179,6 +180,7 @@ describe('OneShotsService', () => {
       reviewNote: 'Aprovado',
     });
     const transaction = {
+      sanction: { findFirst: jest.fn().mockResolvedValue(null) },
       session: { update: jest.fn() },
       oneShot: {
         findUnique: oneShotRepository.findUnique,
@@ -224,6 +226,7 @@ describe('OneShotsService', () => {
       },
     });
     const transaction = {
+      sanction: { findFirst: jest.fn().mockResolvedValue(null) },
       session: { update: jest.fn() },
       oneShot: {
         findUnique: oneShotRepository.findUnique,
@@ -263,6 +266,7 @@ describe('OneShotsService', () => {
     });
 
     const transaction = {
+      sanction: { findFirst: jest.fn().mockResolvedValue(null) },
       session: { update: jest.fn() },
       oneShot: {
         findUnique: oneShotRepository.findUnique,

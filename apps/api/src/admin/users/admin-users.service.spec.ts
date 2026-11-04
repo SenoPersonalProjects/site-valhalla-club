@@ -87,6 +87,7 @@ describe('AdminUsersService', () => {
     actor = approved('operator', SystemRole.ADMIN);
     target = approved('target');
     transaction = {
+      sanction: { findFirst: jest.fn().mockResolvedValue(null) },
       user: {
         findUnique: jest.fn(async ({ where }) =>
           where.id === actor.id
@@ -101,12 +102,10 @@ describe('AdminUsersService', () => {
       },
       userClubRole: {
         createMany: jest.fn().mockResolvedValue({ count: 1 }),
-        findUnique: jest
-          .fn()
-          .mockResolvedValue({
-            role: 'MASTER',
-            grantedAt: new Date('2026-01-01Z'),
-          }),
+        findUnique: jest.fn().mockResolvedValue({
+          role: 'MASTER',
+          grantedAt: new Date('2026-01-01Z'),
+        }),
         deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
     };
@@ -114,6 +113,7 @@ describe('AdminUsersService', () => {
       throw new Error('Operation escaped transaction');
     };
     root = {
+      sanction: { findFirst: jest.fn().mockResolvedValue(null) },
       user: {
         findUnique: jest.fn(fail),
         findMany: jest.fn(fail),
@@ -439,6 +439,7 @@ describe('Admin user transaction retries', () => {
             throw prismaError('P2034');
           });
           const tx = {
+            sanction: { findFirst: jest.fn().mockResolvedValue(null) },
             user: {
               findUnique: jest.fn(async ({ where }) =>
                 where.id === 'operator'
@@ -485,6 +486,7 @@ describe('Admin user transaction retries', () => {
           expect(options.isolationLevel).toBe('Serializable');
           const attempt = clients.length;
           const tx = {
+            sanction: { findFirst: jest.fn().mockResolvedValue(null) },
             user: {
               findUnique: jest.fn(async ({ where }) =>
                 where.id === 'operator'
@@ -592,6 +594,7 @@ describe('Admin user transaction retries', () => {
           snapshot = structuredClone(state);
         const writes: any[] = [];
         const tx = {
+          sanction: { findFirst: jest.fn().mockResolvedValue(null) },
           user: {
             findUnique: jest.fn(async ({ where }) => snapshot[where.id]),
             updateMany: jest.fn(async ({ where, data }) => {
@@ -661,6 +664,7 @@ describe('Concurrent club-role decisions', () => {
           local = structuredClone(stored);
         };
         const tx = {
+          sanction: { findFirst: jest.fn().mockResolvedValue(null) },
           user: {
             findUnique: jest.fn(async ({ where }) =>
               approved(

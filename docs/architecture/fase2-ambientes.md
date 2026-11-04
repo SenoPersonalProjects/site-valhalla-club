@@ -14,12 +14,16 @@ não provisiona serviços nem comprova disponibilidade contínua dos ambientes.
 | Domínio base | Campaign, Session e OneShot implementados | Requer validação funcional a cada release | Sem declaração de produção autenticada |
 | Logging / Request ID | Implementados | Disponíveis no código; exportação/retenção operacional a confirmar | Estratégia de coleta a validar |
 | Autenticação/JWT | Cadastro, revisão inicial e Bearer implementados no código | Exige configurar secrets e aplicar migration de authVersion pelo fluxo autorizado | Deploy autenticado não declarado |
+| Sanções e recursos | Criação, bloqueios disponíveis, reversão, expiração e recursos validados localmente | Validação desta entrega pendente; participação/eventos dependem dos respectivos fluxos | Deploy disciplinar não declarado |
 | Métricas consolidadas | Definidas para coleta | Sem baseline neste repositório | Dimensionamento pendente |
 
 A publicação do MVP é independente da API: a landing atual usa conteúdo estático.
-O schema também modela funcionalidades ainda sem implementação de aplicação,
-como feedbacks, reports, disciplina e audit log. Modelo persistente não significa
-fluxo de produto entregue. O estado da migration em homologação é o registrado
+O schema também modela funcionalidades ainda sem fluxo completo nesta base,
+como feedbacks, reports e emissão de advertências. Sanções/recursos e auditoria
+possuem implementação de aplicação, com limites descritos no
+[contrato disciplinar](../api/sancoes-restricoes-reversoes-recursos.md) e no
+[contrato de auditoria](../api/audit-log.md). Modelo persistente não significa
+fluxo de produto entregue ou homologado. O estado da migration em homologação é o registrado
 na [documentação de banco](../database/prisma-postgresql-e-portabilidade-mysql.md),
 não uma nova consulta ao banco nesta revisão.
 

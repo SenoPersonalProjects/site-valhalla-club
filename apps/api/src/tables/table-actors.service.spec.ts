@@ -8,6 +8,7 @@ describe('TableActorsService', () => {
   const userRepository = { findUnique: jest.fn() };
   const gameSystemRepository = { findUnique: jest.fn() };
   const prisma = {
+    sanction: { findFirst: jest.fn().mockResolvedValue(null) },
     user: userRepository,
     gameSystem: gameSystemRepository,
   } as unknown as PrismaService;
@@ -72,6 +73,7 @@ describe('TableActorsService', () => {
       systemRole: SystemRole.ADMIN,
     });
     const transaction = {
+      sanction: { findFirst: jest.fn().mockResolvedValue(null) },
       user: { findUnique },
     } as unknown as Prisma.TransactionClient;
     await expect(

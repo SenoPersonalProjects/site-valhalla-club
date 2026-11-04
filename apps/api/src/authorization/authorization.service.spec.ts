@@ -8,7 +8,10 @@ import {
 
 describe('AuthorizationService', () => {
   const findUnique = jest.fn();
-  const prisma = { user: { findUnique } } as unknown as PrismaService;
+  const prisma = {
+    sanction: { findFirst: jest.fn().mockResolvedValue(null) },
+    user: { findUnique },
+  } as unknown as PrismaService;
   const service = new AuthorizationService(prisma);
   const user = (systemRole = SystemRole.USER, roles: ClubRole[] = []) => ({
     status: AccountStatus.APPROVED,
@@ -186,7 +189,10 @@ describe('AuthorizationService', () => {
     const txRead = jest
       .fn()
       .mockResolvedValue(user(SystemRole.DEV, [ClubRole.MASTER]));
-    const client = { user: { findUnique: txRead } } as unknown as PrismaService;
+    const client = {
+      sanction: { findFirst: jest.fn().mockResolvedValue(null) },
+      user: { findUnique: txRead },
+    } as unknown as PrismaService;
     await service.assertRoles('actor', ADMINISTRATOR_REQUIREMENT, client);
     await service.assertRoles('actor', MASTER_REQUIREMENT, client);
     expect(txRead).toHaveBeenCalledTimes(2);

@@ -18,6 +18,7 @@ describe('CampaignsService', () => {
   };
   const runTransaction = jest.fn();
   const prisma = {
+    sanction: { findFirst: jest.fn().mockResolvedValue(null) },
     campaign: campaignRepository,
     $transaction: runTransaction,
   } as unknown as PrismaService;
@@ -78,9 +79,10 @@ describe('CampaignsService', () => {
       description: '  Campanha semanal  ',
     });
 
-    expect(actorMethods.assertMaster).toHaveBeenCalledWith('master-1');
+    expect(actorMethods.assertMaster).toHaveBeenCalledWith('master-1', prisma);
     expect(actorMethods.assertActiveGameSystem).toHaveBeenCalledWith(
       'system-1',
+      prisma,
     );
 
     const createCalls = campaignRepository.create.mock.calls as unknown[][];
@@ -93,7 +95,9 @@ describe('CampaignsService', () => {
       description: 'Campanha semanal',
     });
     expect(campaignRepository.count).not.toHaveBeenCalled();
-    expect(runTransaction).not.toHaveBeenCalled();
+    expect(runTransaction).toHaveBeenCalledWith(expect.any(Function), {
+      isolationLevel: 'Serializable',
+    });
   });
 
   it.each([0, 1])('publishes with %i other active campaigns', async (count) => {

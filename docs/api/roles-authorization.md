@@ -87,6 +87,11 @@ antes da camada de roles.
 | PATCH `/admin/users/:id/registration-review` | ADMIN ou DEV de sistema |
 | GET `/admin/users`, GET `/admin/users/:id` | ADMIN ou DEV de sistema |
 | GET `/admin/audit-logs` | ADMIN ou DEV de sistema; consulta read-only |
+| POST `/admin/sanctions` | ADMIN ou DEV de sistema; criação com justificativa e auditoria |
+| GET `/admin/sanctions`, GET `/admin/sanctions/:id` | ADMIN ou DEV de sistema; listagem e detalhe administrativos |
+| PATCH `/admin/sanctions/:id/reversal` | ADMIN ou DEV de sistema; motivo obrigatório e auditoria; preserva a primeira reversão |
+| GET `/admin/appeals`, GET `/admin/appeals/:id` | ADMIN ou DEV de sistema; consultas administrativas mínimas |
+| PATCH `/admin/appeals/:id/review` | ADMIN ou DEV de sistema diferente do aplicador e do titular; resposta obrigatória |
 | PATCH `/admin/users/:id/system-role` | ADMIN ou DEV de sistema; outro alvo APPROVED |
 | POST `/admin/users/:id/club-roles`, DELETE `/admin/users/:id/club-roles/:role` | ADMIN ou DEV de sistema; outro alvo APPROVED |
 | PATCH `/admin/campaigns/:id/approval` | ADMIN ou DEV de sistema |
@@ -100,6 +105,29 @@ recurso: o próprio responsável precisa de MASTER; outro operador precisa de
 ADMIN/DEV de sistema, conforme a regra administrativa já existente. Um guard
 MASTER indiscriminado nessas rotas impediria esse gerenciamento administrativo.
 Essas decisões continuam nos serviços, via `TableActorsService.assertCanManage`.
+
+O [fluxo de sanções](sancoes-restricoes-reversoes-recursos.md) relê a autorização
+administrativa dentro da transação. Criação usa Serializable com retries de
+conflitos de escrita; leituras usam RepeatableRead e projeções limitadas.
+Registro de sanções não modifica status ou papéis da conta. O AuthGuard e a
+camada central verificam suspensão/expulsão vigentes, inclusive para ADMIN/DEV.
+As operações de mesas também verificam o tipo e escopo aplicáveis na transação.
+As consultas em `/account/sanctions`, `/account/warnings` e `/account/appeals`,
+assim como envio em `POST /account/appeals`, permitem somente decisões e recursos
+do titular aprovado, sem exigir papel administrativo. Essas rotas e o logout
+mantêm autenticação completa mesmo durante suspensão/expulsão; a exceção não
+transforma a rota em pública nem permite consultar terceiros.
+
+Reversão também relê as permissões em cada tentativa Serializable e não pode
+ser usada por um administrador com suspensão/expulsão vigente. A reconciliação
+de expiração é interna e não recebe identidade do cliente. Nenhuma dessas
+operações modifica os papéis ou o estado de cadastro do destinatário.
+
+Avaliar recurso exige outro ADMIN/DEV, diferente do aplicador original e do
+titular. A verificação ocorre no TransactionClient de cada tentativa. Se não
+houver outro operador disponível, a API não libera a avaliação pelo aplicador.
+O mesmo titular pode contestar advertência e cada sanção relacionada de forma
+independente; aprovar um recurso não encerra as demais medidas.
 
 As rotas públicas permanecem exatamente GET `/`, GET `/health`,
 GET `/campaigns/public`, GET `/one-shots/public`, POST `/auth/register` e
@@ -117,9 +145,11 @@ e escrita. Aprovação/correção administrativa verifica o operador dentro dess
 fronteira, assim como a revisão de cadastro. O guard é uma defesa HTTP adicional,
 não substitui essas verificações. Retries Serializable reexecutam a autorização
 e leem o estado atual, sem reaproveitar permissões da tentativa anterior.
-A criação de Campaign mantém sua escrita atômica existente. Na criação de
-OneShot, MASTER e sistema ativo também são relidos no TransactionClient de
-cada tentativa, antes da quota e da criação atômica do agregado.
+A criação de Campaign usa Serializable para verificar MASTER, sistema ativo e
+restrições antes da inserção. Na criação de OneShot, essas verificações também
+usam o TransactionClient de cada tentativa, antes da quota e da criação atômica
+do agregado. Publicação e condução verificam o mestre responsável mesmo quando
+a operação é solicitada por outro administrador autorizado.
 
 ## Erros
 

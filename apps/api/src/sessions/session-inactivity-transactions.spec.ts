@@ -34,13 +34,12 @@ function harness() {
     throw new Error('root state access forbidden');
   });
   const tx = {
+    sanction: { findFirst: jest.fn().mockResolvedValue(null) },
     user: {
-      findUnique: jest
-        .fn()
-        .mockResolvedValue({
-          status: 'APPROVED',
-          clubRoles: [{ role: 'MASTER' }],
-        }),
+      findUnique: jest.fn().mockResolvedValue({
+        status: 'APPROVED',
+        clubRoles: [{ role: 'MASTER' }],
+      }),
     },
     campaign: {
       findUnique: jest.fn().mockResolvedValue({
@@ -61,6 +60,7 @@ function harness() {
       operation(tx as unknown as Prisma.TransactionClient),
   );
   const prisma = {
+    sanction: { findFirst: jest.fn().mockResolvedValue(null) },
     $transaction: transaction,
     user: { findUnique: outside },
     campaign: { findUnique: outside, update: outside },
@@ -276,13 +276,12 @@ describe('PR #41 inactivity versus session writes', () => {
             inactivity = false;
           let stagedDate = snapshotDate;
           const tx = {
+            sanction: { findFirst: jest.fn().mockResolvedValue(null) },
             user: {
-              findUnique: jest
-                .fn()
-                .mockResolvedValue({
-                  status: 'APPROVED',
-                  clubRoles: [{ role: 'MASTER' }],
-                }),
+              findUnique: jest.fn().mockResolvedValue({
+                status: 'APPROVED',
+                clubRoles: [{ role: 'MASTER' }],
+              }),
             },
             campaign: {
               findUnique: jest.fn(async () => {
@@ -357,6 +356,7 @@ describe('PR #41 inactivity versus session writes', () => {
         },
       );
       const prisma = {
+        sanction: { findFirst: jest.fn().mockResolvedValue(null) },
         $transaction: transaction,
         campaign: { update: outside, updateMany: outside, findUnique: outside },
         session: { create: outside, update: outside, findUnique: outside },

@@ -81,6 +81,34 @@ Um login posterior emite token com a versão atual. Não há refresh token.
 `profile.displayName/whatsappNumber/birthDate`; não busca hash, versão, revisor,
 motivo de suspensão ou dados de terceiros.
 
+## Sanções e acesso disciplinar limitado
+
+O guard consulta suspensão de acesso e expulsão vigentes a cada requisição
+privada, inclusive com JWT emitido antes da decisão. O bloqueio retorna
+`403 ACCOUNT_SANCTIONED`. A sanção não altera `AccountStatus` ou papéis:
+contas APPROVED continuam podendo autenticar com senha real, mas o token
+permite somente as rotas disciplinares explicitamente autorizadas e logout.
+Sanção futura não bloqueia antes do início; vencida não bloqueia após o término,
+mesmo que ainda esteja persistida como ACTIVE.
+
+As exceções atuais são as consultas próprias `GET /account/sanctions` e
+`GET /account/sanctions/:id`, `GET /account/warnings` e `GET /account/warnings/:id`,
+envio/consulta de recursos em `POST /account/appeals`, `GET /account/appeals` e
+`GET /account/appeals/:id`, além de `POST /auth/logout`.
+Usam metadata interna `AllowDisciplinaryAccess`, sem
+`@Public()`. Assinatura, expiração, versão e estado APPROVED continuam exigidos.
+Headers do cliente não habilitam essa exceção. Conta SUSPENDED pelo ciclo de
+cadastro permanece indisponível; a exceção não recupera estados de conta.
+O logout mantém a revogação de todos os tokens anteriores.
+
+As consultas próprias não permitem trocar o titular nem dão acesso a origens,
+relatos, evidências ou audit log. Envio de recurso exige caso do próprio titular;
+não aceita identidade, sequência ou decisão do cliente. Avaliação é uma rota
+administrativa comum, bloqueada para operador sob suspensão/expulsão.
+Restrições parciais de mesas não bloqueiam todas as rotas: seus efeitos ficam
+nas operações correspondentes, conforme o [contrato disciplinar](sancoes-restricoes-reversoes-recursos.md).
+Rotas deliberadamente públicas permanecem acessíveis.
+
 ## Revisão inicial
 
 Body: `decision: APPROVED | REJECTED`, `note` opcional (obrigatória e não vazia

@@ -29,6 +29,29 @@ permite listagem/detalhe mínimos e alteração explícita de papéis de terceir
 APPROVED. Suspensão, recuperação e disciplina permanecem fora desse fluxo.
 O cadastro não concede papéis de clube automaticamente.
 
+O [contrato de sanções, restrições, reversões e recursos](../../docs/api/sancoes-restricoes-reversoes-recursos.md)
+registra as regras acordadas e as dependências de participação/eventos.
+Criação, listagem e detalhe administrativos estão implementados em
+`/admin/sanctions`, com validação de origem/escopo/prazo e auditoria atômica.
+Bloqueios de criação de mesas, atividade como mestre e acesso comum estão
+integrados, respeitando escopo e vigência. Suspensão/expulsão preservam consulta
+autenticada às próprias decisões em `GET /account/sanctions` e `GET /account/sanctions/:id`,
+além do logout. Reversão administrativa está disponível em
+`PATCH /admin/sanctions/:id/reversal`, com motivo obrigatório e auditoria atômica.
+A reconciliação de expiração roda na inicialização e a cada minuto, em lotes de
+até 25 decisões, sem depender dela para remover o bloqueio por horário.
+Recursos estão disponíveis em `/account/appeals`, com até três envios por caso
+e apenas um pendente. ADMIN/DEV independente avalia em `/admin/appeals/:id/review`;
+aprovação reverte somente a medida contestada, na mesma transação. As consultas
+próprias de advertências em `/account/warnings` permitem compreender e recorrer
+de decisões existentes, inclusive durante suspensão/expulsão. Criação de
+advertências, participação e eventos dependem dos respectivos fluxos.
+
+A [bateria de testes manuais/aceitação](../../docs/api/sancoes-testes-manuais.md)
+registra 121 cenários aprovados em 286 requisições HTTP reais, com PostgreSQL
+local descartável, incluindo scheduler, concorrência e rollback. Essa execução
+local não representa homologação.
+
 O [perfil e ciclo de vida da própria conta](../../docs/api/account-lifecycle.md)
 reutiliza `/auth/me`, permite editar nome/WhatsApp e solicitar exclusão com
 janela de 90 dias e revogação de tokens. Recuperação segura e anonimização
@@ -105,10 +128,15 @@ são fundação do domínio. Detalhes canônicos:
 [métricas, capacidade e logs seguros](../../docs/observability/metricas-capacidade-fase2.md)
 e [dados pessoais e acesso](../../docs/privacy/lgpd-fase2.md).
 
-O [audit log administrativo](../../docs/api/audit-log.md) persiste as sete ações
-administrativas explícitas na mesma transação, inclusive no-ops, e oferece
+O [audit log administrativo](../../docs/api/audit-log.md) persiste as ações
+administrativas documentadas na mesma transação, inclusive no-ops, e oferece
 consulta paginada read-only em `GET /admin/audit-logs` para ADMIN/DEV aprovados.
-Não substitui observabilidade nem registra leituras, auth ou ações do titular.
+Não substitui observabilidade nem registra leituras, auth ou as demais ações do titular.
+O envio de recurso pelo titular é uma exceção explícita: registra
+`APPEAL_SUBMITTED`. Avaliação e eventual reversão geram eventos atômicos,
+sem copiar justificativa ou resposta para metadata.
+Expiração de sanções registra evento interno com ator nulo, na mesma transação
+da mudança de estado, sem copiar motivos privados.
 Participação, feedback e disciplina têm modelos no schema; seus fluxos completos
 não estão implementados por esta documentação.
 
